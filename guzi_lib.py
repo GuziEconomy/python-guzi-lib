@@ -3,7 +3,17 @@ def create_empty_init_blocks(birthdate, new_user_pub_key, ref_pub_key):
     """
     Return Block[]
     """
-    pass
+    birthday_block = Block(
+            close_date=birthdate,
+            signer=new_user_pub_key,
+            guzis=0,
+            guzas=0,
+            balance=0,
+            total=0)
+    birthday_block.previous_block_hash =  "0000000000000000000000000000000000000000000000000000000000000000"
+    birthday_block.merkle_root =  "0000000000000000000000000000000000000000000000000000000000000000"
+    init_block = Block()
+    return [birthday_block, init_block]
 
 def fill_init_blocks(blocks, ref_priv_key):
     """
@@ -11,16 +21,11 @@ def fill_init_blocks(blocks, ref_priv_key):
     """
     pass
 
-def create_empty_block(prev_block):
+def create_empty_block(previous_block):
     """
     Return Block
     """
-    block = Block()
-    block.previous_block_hash = prev_block.hash
-    block.guzis = prev_block.guzis
-    block.guzas = prev_block.guzas
-    block.balance = prev_block.balance
-    block.total = prev_block.total
+    block = Block(previous_block=previous_block)
     return block
 
 def create_transaction(tx_type, source, amount, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
@@ -55,19 +60,42 @@ def send(blockchain, email):
 
 
 class Block:
-    def __init__(self):
-        self.version = 1
-        self.close_date = None
-        self.previous_block_hash = 0
+    def __init__(self,
+            close_date=None, previous_block=None, signer=None,
+            guzis=-1, guzas=-1, balance=-1, total=-1,
+            transactions=[], engagements=[]):
+        self.version = "01"
+        self.close_date = close_date
+        self.previous_block_hash = previous_block.hash if previous_block else None
         self.merkle_root = None
-        self.signer = None
-        self.guzis = 0
-        self.guzas = 0
-        self.balance = 0
-        self.total = 0
-        self.transactions = []
-        self.engagements = []
+        self.signer = signer
+        self.guzis = previous_block.guzis if previous_block else guzis
+        self.guzas = previous_block.guzas if previous_block else guzas
+        self.balance = previous_block.balance if previous_block else balance
+        self.total = previous_block.total if previous_block else total
+        self.transactions = transactions
+        self.engagements = engagements
         self.hash = None
+
+    def to_hex(self):
+        hex_string = self.version
+        hex_string += format(self.close_date.timestamp(), 'x')
+        hex_string += self.previous_block_hash
+        hex_string += self.merkle_root
+        hex_string += self.signer
+        hex_string += f"{self.guzis:0{4}x}"
+        hex_string += f"{self.guzas:0{4}x}"
+        hex_string += f"{self.balance:0{6}x}"
+        hex_string += f"{self.total:0{8}x}"
+        hex_string += 0000 #transactions
+        hex_string += 0000 #engagements
+        return hex_string
+
+    def sign(self, privkey):
+        hex_string = self.to_hex()
+        byte_array = bytearray.fromhex(hex_string)
+        hash = hashlib.sha256(byte_array).hexdigest()
+        # Reste a signer ça
 
 
 class Transaction:

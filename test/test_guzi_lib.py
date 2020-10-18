@@ -1,5 +1,21 @@
 import unittest
-from guzi_lib import Block, create_empty_block
+from datetime import date
+from guzi_lib import Block, create_empty_block, create_empty_init_blocks
+
+NEW_USER_PUB_KEY = "02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b"
+NEW_USER_PRIV_KEY = "cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6"
+REF_PUB_KEY = "031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d"
+REF_PRIV_KEY = "7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca"
+EMPTY_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
+
+class TestBlock(unittest.TestCase):
+
+    def test_to_hex(self):
+        # Arrange
+        block = Block()
+        block.close_date
+        # Act
+        # Assert
 
 class TestGuzi(unittest.TestCase):
 
@@ -16,7 +32,7 @@ class TestGuzi(unittest.TestCase):
         new_block = create_empty_block(previous_block)
         
         # Assert
-        self.assertEqual(new_block.version, 1)
+        self.assertEqual(new_block.version, "01")
         self.assertEqual(new_block.close_date, None)
         self.assertEqual(new_block.previous_block_hash, "aaa")
         self.assertEqual(new_block.merkle_root, None)
@@ -28,3 +44,43 @@ class TestGuzi(unittest.TestCase):
         self.assertEqual(new_block.transactions, [])
         self.assertEqual(new_block.engagements, [])
         self.assertEqual(new_block.hash, None)
+
+    def test_create_empty_init_blocks(self):
+        """
+        Birthday block :
+            "01;birthday_date;random_hash;useless_merkle_root;
+            new_user_public_key;0;0;0;0;0;(no transaction);0;
+            (no engagement);hash0"
+            01 367D8F80 0000000000000000000000000000000000000000000000000000000000000000 0000000000000000000000000000000000000000000000000000000000000000 02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b 0000 0000 0000 00000000 0000 0000 
+            => hash = "2921cf75ae9246f8492d5781109a135106fe49daa626dd2239c6674c0330e16f"
+            => signed hash = 
+        Initialisation block ;
+            "01;today_date;hash0;merkle_root;
+            reference_public_key;0;0;0;0;2;transactions_init;
+            0;(no engagement);hash"
+        """
+
+        # Arrange
+        birthdate = date(1998, 12, 21)
+
+        # Act
+        blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, REF_PUB_KEY)
+        birthday_block, init_block = blocks
+        
+        # Assert
+        self.assertEqual(len(blocks), 2)
+
+        self.assertEqual(birthday_block.version, "01")
+        self.assertEqual(birthday_block.close_date, birthdate)
+        self.assertEqual(birthday_block.previous_block_hash, EMPTY_HASH)
+        self.assertEqual(birthday_block.merkle_root, EMPTY_HASH)
+        self.assertEqual(birthday_block.signer, NEW_USER_PUB_KEY)
+        self.assertEqual(birthday_block.guzis, 0)
+        self.assertEqual(birthday_block.guzas, 0)
+        self.assertEqual(birthday_block.balance, 0)
+        self.assertEqual(birthday_block.total, 0)
+        self.assertEqual(birthday_block.transactions, [])
+        self.assertEqual(birthday_block.engagements, [])
+        #self.assertEqual(birthday_block.hash, "")
+
+        self.assertEqual(init_block.version, "01")
