@@ -79,7 +79,7 @@ class Block:
 
     def to_hex(self):
         hex_string = self.version
-        hex_string += format(self.close_date.timestamp(), 'x')
+        hex_string += format(int(self.close_date.timestamp()), 'x')
         hex_string += self.previous_block_hash
         hex_string += self.merkle_root
         hex_string += self.signer
@@ -87,8 +87,8 @@ class Block:
         hex_string += f"{self.guzas:0{4}x}"
         hex_string += f"{self.balance:0{6}x}"
         hex_string += f"{self.total:0{8}x}"
-        hex_string += 0000 #transactions
-        hex_string += 0000 #engagements
+        hex_string += "0000" #transactions
+        hex_string += "0000" #engagements
         return hex_string
 
     def sign(self, privkey):

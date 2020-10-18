@@ -1,5 +1,6 @@
 import unittest
-from datetime import date
+import pytz
+from datetime import datetime
 from guzi_lib import Block, create_empty_block, create_empty_init_blocks
 
 NEW_USER_PUB_KEY = "02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b"
@@ -7,15 +8,45 @@ NEW_USER_PRIV_KEY = "cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f6
 REF_PUB_KEY = "031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d"
 REF_PRIV_KEY = "7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca"
 EMPTY_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
+TEST_HASH = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" # Hash of "test"
 
 class TestBlock(unittest.TestCase):
 
     def test_to_hex(self):
+        """
+        "01;birthday_date;random_hash;useless_merkle_root;
+        new_user_public_key;0;0;0;0;0;(no transaction);0;
+        (no engagement);hash0"
+        Type: 01
+        Date (1998/12/21): 367D8F80
+        Previous_block_hash: 0000000000000000000000000000000000000000000000000000000000000000 
+        Merkle_root: 0000000000000000000000000000000000000000000000000000000000000000 
+        Signer: 02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b
+        guzis: 0000
+        guzas: 0000
+        balance: 000000
+        total: 00000000
+        transactions count: 0000
+        engagements count: 0000 
+        """
         # Arrange
-        block = Block()
-        block.close_date
+        block = Block(
+                close_date=datetime(1998, 12, 21,0,0,0,0,tzinfo=pytz.utc),
+                signer=NEW_USER_PUB_KEY,
+                guzis=0,
+                guzas=0,
+                balance=0,
+                total=0
+                )
+        block.previous_block_hash = EMPTY_HASH
+        block.merkle_root = EMPTY_HASH
+
         # Act
+        result = block.to_hex()
+
         # Assert
+        self.assertEqual(result, '01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
+
 
 class TestGuzi(unittest.TestCase):
 
@@ -61,7 +92,7 @@ class TestGuzi(unittest.TestCase):
         """
 
         # Arrange
-        birthdate = date(1998, 12, 21)
+        birthdate = datetime(1998, 12, 21)
 
         # Act
         blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, REF_PUB_KEY)
