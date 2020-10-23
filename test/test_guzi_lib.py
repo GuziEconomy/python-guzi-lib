@@ -128,8 +128,7 @@ class TestGuzi(unittest.TestCase):
             new_user_public_key;0;0;0;0;0;(no transaction);0;
             (no engagement);hash0"
             01 367D8F80 0000000000000000000000000000000000000000000000000000000000000000 0000000000000000000000000000000000000000000000000000000000000000 02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b 0000 0000 0000 00000000 0000 0000 
-            => hash = 0x2921cf75ae9246f8492d5781109a135106fe49daa626dd2239c6674c0330e16f
-            => signed hash = 
+            => hash = 0xae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
         Initialisation block ;
             "01;today_date;hash0;merkle_root;
             reference_public_key;0;0;0;0;2;transactions_init;
@@ -137,10 +136,14 @@ class TestGuzi(unittest.TestCase):
         """
 
         # Arrange
+        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        hash = "ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146" 
+        data = hash.encode()
+
         birthdate = datetime(1998, 12, 21)
 
         # Act
-        blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, REF_PUB_KEY)
+        blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         birthday_block, init_block = blocks
         
         # Assert
@@ -157,6 +160,20 @@ class TestGuzi(unittest.TestCase):
         self.assertEqual(birthday_block.total, 0)
         self.assertEqual(birthday_block.transactions, [])
         self.assertEqual(birthday_block.engagements, [])
-        #self.assertEqual(birthday_block.hash, "")
+        self.assertTrue(vk.verify(birthday_block.hash, data))
 
         self.assertEqual(init_block.version, 0x01)
+        self.assertEqual(init_block.close_date, None)
+        self.assertEqual(init_block.previous_block_hash, birthday_block.hash)
+        self.assertEqual(init_block.merkle_root, EMPTY_HASH)
+        self.assertEqual(init_block.signer, REF_PUB_KEY)
+        self.assertEqual(init_block.guzis, 0)
+        self.assertEqual(init_block.guzas, 0)
+        self.assertEqual(init_block.balance, 0)
+        self.assertEqual(init_block.total, 0)
+        self.assertEqual(init_block.transactions, [])
+        self.assertEqual(init_block.engagements, [])
+        self.assertEqual(init_block.hash, EMPTY_HASH)
+
+    def test_fill_init_blocks(self):
+        pass

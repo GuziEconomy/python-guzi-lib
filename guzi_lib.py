@@ -1,7 +1,9 @@
 import hashlib
 import ecdsa
 
-def create_empty_init_blocks(birthdate, new_user_pub_key, ref_pub_key):
+EMPTY_HASH = 0x0000000000000000000000000000000000000000000000000000000000000000
+
+def create_empty_init_blocks(birthdate, new_user_pub_key, new_user_priv_key, ref_pub_key):
     """
     Return Block[]
     """
@@ -12,9 +14,18 @@ def create_empty_init_blocks(birthdate, new_user_pub_key, ref_pub_key):
             guzas=0,
             balance=0,
             total=0)
-    birthday_block.previous_block_hash =  0x0000000000000000000000000000000000000000000000000000000000000000
-    birthday_block.merkle_root =  0x0000000000000000000000000000000000000000000000000000000000000000
-    init_block = Block()
+    birthday_block.previous_block_hash =  EMPTY_HASH
+    birthday_block.merkle_root =  EMPTY_HASH
+    birthday_block.sign(new_user_priv_key)
+    init_block = Block(
+            previous_block=birthday_block,
+            signer=ref_pub_key,
+            guzis=0,
+            guzas=0,
+            balance=0,
+            total=0)
+    init_block.merkle_root =  EMPTY_HASH
+    init_block.hash =  EMPTY_HASH
     return [birthday_block, init_block]
 
 def fill_init_blocks(blocks, ref_priv_key):
@@ -97,7 +108,6 @@ class Block:
         hex_string = self.to_hex()
         byte_array = bytearray.fromhex(hex_string)
         return hashlib.sha256(byte_array).hexdigest()
-        
 
     def sign(self, privkey):
         """
@@ -105,7 +115,8 @@ class Block:
         return bytes
         """
         sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
-        return sk.sign(self.to_hash().encode())
+        self.hash = sk.sign(self.to_hash().encode())
+        return self.hash
 
 
 class Transaction:
