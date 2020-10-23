@@ -1,3 +1,5 @@
+import hashlib
+import ecdsa
 
 def create_empty_init_blocks(birthdate, new_user_pub_key, ref_pub_key):
     """
@@ -10,8 +12,8 @@ def create_empty_init_blocks(birthdate, new_user_pub_key, ref_pub_key):
             guzas=0,
             balance=0,
             total=0)
-    birthday_block.previous_block_hash =  "0000000000000000000000000000000000000000000000000000000000000000"
-    birthday_block.merkle_root =  "0000000000000000000000000000000000000000000000000000000000000000"
+    birthday_block.previous_block_hash =  0x0000000000000000000000000000000000000000000000000000000000000000
+    birthday_block.merkle_root =  0x0000000000000000000000000000000000000000000000000000000000000000
     init_block = Block()
     return [birthday_block, init_block]
 
@@ -64,7 +66,7 @@ class Block:
             close_date=None, previous_block=None, signer=None,
             guzis=-1, guzas=-1, balance=-1, total=-1,
             transactions=[], engagements=[]):
-        self.version = "01"
+        self.version = 0x01
         self.close_date = close_date
         self.previous_block_hash = previous_block.hash if previous_block else None
         self.merkle_root = None
@@ -78,24 +80,32 @@ class Block:
         self.hash = None
 
     def to_hex(self):
-        hex_string = self.version
-        hex_string += format(int(self.close_date.timestamp()), 'x')
-        hex_string += self.previous_block_hash
-        hex_string += self.merkle_root
-        hex_string += self.signer
-        hex_string += f"{self.guzis:0{4}x}"
-        hex_string += f"{self.guzas:0{4}x}"
-        hex_string += f"{self.balance:0{6}x}"
-        hex_string += f"{self.total:0{8}x}"
-        hex_string += "0000" #transactions
-        hex_string += "0000" #engagements
-        return hex_string
+        hex_result = f"{self.version:02x}"
+        hex_result += f"{int(self.close_date.timestamp()):08x}"
+        hex_result += f"{self.previous_block_hash:064x}"
+        hex_result += f"{self.merkle_root:064x}"
+        hex_result += f"{self.signer:066x}"
+        hex_result += f"{self.guzis:04x}"
+        hex_result += f"{self.guzas:04x}"
+        hex_result += f"{self.balance:06x}"
+        hex_result += f"{self.total:08x}"
+        hex_result += f"{0:04x}" #transactions
+        hex_result += f"{0:04x}" #engagements
+        return hex_result
 
-    def sign(self, privkey):
+    def to_hash(self):
         hex_string = self.to_hex()
         byte_array = bytearray.fromhex(hex_string)
-        hash = hashlib.sha256(byte_array).hexdigest()
-        # Reste a signer ça
+        return hashlib.sha256(byte_array).hexdigest()
+        
+
+    def sign(self, privkey):
+        """
+        privkey : int
+        return bytes
+        """
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
+        return sk.sign(self.to_hash().encode())
 
 
 class Transaction:
