@@ -1,5 +1,8 @@
 import hashlib
 import ecdsa
+import pytz
+from datetime import datetime, date
+from enum import Enum
 
 EMPTY_HASH = 0x0000000000000000000000000000000000000000000000000000000000000000
 
@@ -32,7 +35,9 @@ def fill_init_blocks(blocks, ref_priv_key):
     """
     Return Block[]
     """
-    pass
+    init_block = blocks[1]
+    init_block.close_date = datetime.now(tz=pytz.utc)
+    return blocks
 
 def create_empty_block(previous_block):
     """
@@ -119,11 +124,18 @@ class Block:
         return self.hash
 
 
-class Transaction:
-    def __init__(self, tx_type, source, amount, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
+class TxType(Enum):
+    GUZI_CREATE = 0x00
+    GUZA_CREATE = 0x01
 
-        sel.version = 1
+
+class Transaction:
+
+    def __init__(self, tx_type, source, amount, tx_date=None, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
+
+        self.version = 1
         self.tx_type = tx_type
+        self.date = tx_date
         self.source = source
         self.amount = amount
         self.target_company = target_company
@@ -134,3 +146,90 @@ class Transaction:
         self.end_date = end_date
         self.detail = detail
         self.hash = ""
+
+
+class GuziCreationTransaction(Transaction):
+    """
+
+    A GuziCreationTransaction is a Transaction to create daily guzis for user
+    by himself, to himself. It only depends of current block total accumulated
+    value.
+
+    version : 01
+    tx_type : 00
+    date : creation date
+    source : public key of owner
+    amount : number of created guzis, depend of total accumulated of current
+        block. amount = (total_accumulated)^(1/3) + 1
+    hash of the transaction
+
+    """
+    def __init__(self, owner, last_block):
+        amount = 1 # TODO
+        super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
+
+    def to_hex(self):
+        hex_result = f"{self.version:02x}"
+        hex_result += f"{self.tx_type:02x}"
+        hex_result += f"{int(self.date.timestamp()):08x}"
+        hex_result += f"{self.source:066x}"
+        hex_result += f"{self.amount:04x}"
+        return hex_result
+
+    def to_hash(self):
+        hex_string = self.to_hex()
+        byte_array = bytearray.fromhex(hex_string)
+        return hashlib.sha256(byte_array).hexdigest()
+
+    def sign(self, privkey):
+        """
+        privkey : int
+        return bytes
+        """
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
+        self.hash = sk.sign(self.to_hash().encode())
+        return self.hash
+
+
+class GuzaCreationTransaction(Transaction):
+    """
+
+    A GuzaCreationTransaction is a Transaction to create daily guzas for user
+    by himself, to himself. It only depends of current block total accumulated
+    value and birthday date, which must imply age > 18 years old.
+
+    version : 01
+    tx_type : 01
+    date : creation date
+    source : public key of owner
+    amount : number of created guzis, depend of total accumulated of current
+        block. amount = (total_accumulated)^(1/3) + 1
+    hash of the transaction
+
+    """
+    # TODO : check age > 18
+    def __init__(self, owner, last_block):
+        amount = 1 # TODO
+        super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
+
+    def to_hex(self):
+        hex_result = f"{self.version:02x}"
+        hex_result += f"{self.tx_type:02x}"
+        hex_result += f"{int(self.date.timestamp()):08x}"
+        hex_result += f"{self.source:066x}"
+        hex_result += f"{self.amount:04x}"
+        return hex_result
+
+    def to_hash(self):
+        hex_string = self.to_hex()
+        byte_array = bytearray.fromhex(hex_string)
+        return hashlib.sha256(byte_array).hexdigest()
+
+    def sign(self, privkey):
+        """
+        privkey : int
+        return bytes
+        """
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
+        self.hash = sk.sign(self.to_hash().encode())
+        return self.hash

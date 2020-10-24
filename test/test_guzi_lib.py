@@ -1,8 +1,9 @@
 import unittest
 import pytz
 import ecdsa
-from datetime import datetime
-from guzi_lib import Block, create_empty_block, create_empty_init_blocks
+from freezegun import freeze_time
+import datetime
+from guzi_lib import *
 
 NEW_USER_PUB_KEY = 0x02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b
 NEW_USER_PRIV_KEY = 0xcdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6
@@ -15,9 +16,6 @@ class TestBlock(unittest.TestCase):
 
     def test_to_hex(self):
         """
-        "01;birthday_date;random_hash;useless_merkle_root;
-        new_user_public_key;0;0;0;0;0;(no transaction);0;
-        (no engagement);hash0"
         Type: 01
         Date (1998/12/21): 367D8F80
         Previous_block_hash: 0000000000000000000000000000000000000000000000000000000000000000 
@@ -32,7 +30,7 @@ class TestBlock(unittest.TestCase):
         """
         # Arrange
         block = Block(
-                close_date=datetime(1998, 12, 21,0,0,0,0,tzinfo=pytz.utc),
+                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
                 signer=NEW_USER_PUB_KEY,
                 guzis=0,
                 guzas=0,
@@ -51,7 +49,7 @@ class TestBlock(unittest.TestCase):
     def test_to_hash(self):
         # Arrange
         block = Block(
-                close_date=datetime(1998, 12, 21,0,0,0,0,tzinfo=pytz.utc),
+                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
                 signer=NEW_USER_PUB_KEY,
                 guzis=0,
                 guzas=0,
@@ -75,7 +73,7 @@ class TestBlock(unittest.TestCase):
         data = hash.encode()
 
         block = Block(
-                close_date=datetime(1998, 12, 21,0,0,0,0,tzinfo=pytz.utc),
+                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
                 signer=NEW_USER_PUB_KEY,
                 guzis=0,
                 guzas=0,
@@ -123,16 +121,44 @@ class TestGuzi(unittest.TestCase):
 
     def test_create_empty_init_blocks(self):
         """
-        Birthday block :
-            "01;birthday_date;random_hash;useless_merkle_root;
-            new_user_public_key;0;0;0;0;0;(no transaction);0;
-            (no engagement);hash0"
-            01 367D8F80 0000000000000000000000000000000000000000000000000000000000000000 0000000000000000000000000000000000000000000000000000000000000000 02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b 0000 0000 0000 00000000 0000 0000 
-            => hash = 0xae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
-        Initialisation block ;
-            "01;today_date;hash0;merkle_root;
-            reference_public_key;0;0;0;0;2;transactions_init;
-            0;(no engagement);hash"
+
+        When a user creates his account, he creates 2 blocks :
+        1. The first block is called the birthday block and contains the public
+        key of this newly created user plus his birthday date.
+        2. The second block contains the first Guzis (and Guzas) creation, and
+        is signed by the reference.
+        A reference is a person or an entity in whose a group of user gives
+        confidence.
+
+        create_empty_init_blocks create blocks with empty data to be filled by
+        the reference (if reference accepts to sign, of course).
+
+        Content of Birthday block :
+            In bytes :
+            - type : 01
+            - date : 367D8F80
+            - empty hash : EMPTY_HASH
+            - empty merkle : EMPTY_HASH
+            - user id : NEW_USER_PUB_KEY
+            - guzis : 0000
+            - guzas : 0000
+            - balance : 000000
+            - total : 00000000
+            - transactions count : 0000
+            - engagements count : 0000 
+        Initialisation block :
+            - type : 01
+            - date : None
+            - hash_of_birthday_block : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
+            - empty_merkle_root : EMPTY_HASH
+            - reference_public_key : REF_PUB_KEY
+            - guzis : 0000
+            - guzas : 0000
+            - balance : 000000
+            - total : 00000000
+            - transactions count : 0000
+            - engagements count : 0000 
+
         """
 
         # Arrange
@@ -175,5 +201,123 @@ class TestGuzi(unittest.TestCase):
         self.assertEqual(init_block.engagements, [])
         self.assertEqual(init_block.hash, EMPTY_HASH)
 
+    @freeze_time("2011-12-13 12:34:56")
     def test_fill_init_blocks(self):
-        pass
+        """
+
+        When reference receive an empty init blocks (with birthday block and
+        init block), he must fill the init block with correct data, sign the
+        block and send it back to newly created user. And then, new user can
+        have transactions, isn't that beautiful ? Yes it is !
+
+        Data to fill :
+        - signature date
+        - initialisation transactions (1st Guzi & 1st Guza)
+        - Merkle root associated
+        - Signed hash of this block
+
+        Content of Initialisation block after filling :
+            - type : 01
+            - date : Today's date
+            - hash_of_birthday_block : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
+            - empty_merkle_root : TODO
+            - reference_public_key : REF_PUB_KEY
+            - guzis : 0001
+            - guzas : 0001
+            - balance : 000000
+            - total : 00000000
+            - transactions count : 0002
+            - transactions :
+                - create 1 guzi
+                - create 1 guza
+            - engagements count : 0000 
+
+        """
+        # Arrange
+        # vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        # hash = "ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146" 
+        # data = hash.encode()
+
+        birthdate = datetime(1998, 12, 21)
+        blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+
+        # Act
+        _, init_block = fill_init_blocks(blocks, REF_PRIV_KEY)
+        
+        # Assert
+        self.assertEqual(init_block.version, 0x01)
+        self.assertEqual(init_block.close_date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
+        # self.assertEqual(init_block.merkle_root, EMPTY_HASH)
+        # self.assertEqual(init_block.guzis, 1)
+        # self.assertEqual(init_block.guzas, 1)
+        # self.assertEqual(init_block.balance, 0)
+        # self.assertEqual(init_block.total, 0)
+        # self.assertEqual(init_block.transactions, [])
+        # self.assertEqual(init_block.engagements, [])
+        # self.assertEqual(init_block.hash, EMPTY_HASH)
+
+
+class TestGuziCreationTransaction(unittest.TestCase):
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_init_should_create_1_guzi_for_empty_total(self):
+        """
+
+        bytes : 
+        - version : 01
+        - type : 00
+        - datetime : 4ee74670
+        - source : 02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b
+        - amount : 0001
+
+         01004ee7467002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0001
+
+        """
+        # Arrange
+        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        hash = "c472bbbe7b2424aaa9b159e181aac5df954f8ea5d6b362c17201facf8b1cf217" 
+        data = hash.encode()
+
+        # Act
+        tx = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
+        tx.sign(NEW_USER_PRIV_KEY)
+
+        # Assert
+        self.assertEqual(tx.tx_type, 0x00)
+        self.assertEqual(tx.source, NEW_USER_PUB_KEY)
+        self.assertEqual(tx.date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
+        self.assertEqual(tx.amount, 1)
+        self.assertTrue(vk.verify(tx.hash, data))
+
+
+class TestGuzaCreationTransaction(unittest.TestCase):
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_init_should_create_1_guza_for_empty_total(self):
+        """
+
+        bytes : 
+        - version : 01
+        - type : 01
+        - datetime : 4ee74670
+        - source : 02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b
+        - amount : 0001
+
+         01014ee7467002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0001
+
+        """
+        # Arrange
+        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        hash = "9fed68e125157c6aa1607e51e5f3589de850eb4c1e817d829906ce9c86b689ff" 
+        data = hash.encode()
+
+        # Act
+        tx = GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
+        tx.sign(NEW_USER_PRIV_KEY)
+
+        # Assert
+        self.assertEqual(tx.tx_type, 0x01)
+        self.assertEqual(tx.source, NEW_USER_PUB_KEY)
+        self.assertEqual(tx.date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
+        self.assertEqual(tx.amount, 1)
+        self.assertTrue(vk.verify(tx.hash, data))
