@@ -77,7 +77,28 @@ def send(blockchain, email):
     pass
 
 
-class Block:
+class Signable:
+
+    def to_hex(self):
+        raise NotImplemented
+
+    def to_hash(self):
+        hex_string = self.to_hex()
+        byte_array = bytearray.fromhex(hex_string)
+        return hashlib.sha256(byte_array).hexdigest()
+
+    def sign(self, privkey):
+        """
+        privkey : int
+        return bytes
+        """
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
+        self.hash = sk.sign(self.to_hash().encode())
+        return self.hash
+
+
+class Block(Signable):
+
     def __init__(self,
             close_date=None, previous_block=None, signer=None,
             guzis=-1, guzas=-1, balance=-1, total=-1,
@@ -109,27 +130,13 @@ class Block:
         hex_result += f"{0:04x}" #engagements
         return hex_result
 
-    def to_hash(self):
-        hex_string = self.to_hex()
-        byte_array = bytearray.fromhex(hex_string)
-        return hashlib.sha256(byte_array).hexdigest()
-
-    def sign(self, privkey):
-        """
-        privkey : int
-        return bytes
-        """
-        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
-        self.hash = sk.sign(self.to_hash().encode())
-        return self.hash
-
 
 class TxType(Enum):
     GUZI_CREATE = 0x00
     GUZA_CREATE = 0x01
 
 
-class Transaction:
+class Transaction(Signable):
 
     def __init__(self, tx_type, source, amount, tx_date=None, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
 
@@ -176,20 +183,6 @@ class GuziCreationTransaction(Transaction):
         hex_result += f"{self.amount:04x}"
         return hex_result
 
-    def to_hash(self):
-        hex_string = self.to_hex()
-        byte_array = bytearray.fromhex(hex_string)
-        return hashlib.sha256(byte_array).hexdigest()
-
-    def sign(self, privkey):
-        """
-        privkey : int
-        return bytes
-        """
-        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
-        self.hash = sk.sign(self.to_hash().encode())
-        return self.hash
-
 
 class GuzaCreationTransaction(Transaction):
     """
@@ -219,17 +212,3 @@ class GuzaCreationTransaction(Transaction):
         hex_result += f"{self.source:066x}"
         hex_result += f"{self.amount:04x}"
         return hex_result
-
-    def to_hash(self):
-        hex_string = self.to_hex()
-        byte_array = bytearray.fromhex(hex_string)
-        return hashlib.sha256(byte_array).hexdigest()
-
-    def sign(self, privkey):
-        """
-        privkey : int
-        return bytes
-        """
-        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
-        self.hash = sk.sign(self.to_hash().encode())
-        return self.hash
