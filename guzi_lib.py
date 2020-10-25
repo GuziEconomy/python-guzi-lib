@@ -17,8 +17,8 @@ def create_empty_init_blocks(birthdate, new_user_pub_key, new_user_priv_key, ref
             guzas=0,
             balance=0,
             total=0)
-    birthday_block.previous_block_hash =  EMPTY_HASH
-    birthday_block.merkle_root =  EMPTY_HASH
+    birthday_block.previous_block_hash = EMPTY_HASH
+    birthday_block.merkle_root = EMPTY_HASH
     birthday_block.sign(new_user_priv_key)
     init_block = Block(
             previous_block=birthday_block,
@@ -35,8 +35,15 @@ def fill_init_blocks(blocks, ref_priv_key):
     """
     Return Block[]
     """
-    init_block = blocks[1]
+    birth_block, init_block = blocks
     init_block.close_date = datetime.now(tz=pytz.utc)
+    new_user_pub_key = birth_block.signer
+    init_block.add_transaction(GuziCreationTransaction(new_user_pub_key, birth_block))
+    init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key, birth_block))
+    init_block.compute_transactions()
+    init_block.compute_merkle_root()
+    print(ref_priv_key)
+    init_block.sign(ref_priv_key)
     return blocks
 
 def create_empty_block(previous_block):
@@ -102,9 +109,10 @@ class Block(Signable):
     def __init__(self,
             close_date=None, previous_block=None, signer=None,
             guzis=-1, guzas=-1, balance=-1, total=-1,
-            transactions=[], engagements=[]):
+            transactions=None, engagements=None):
         self.version = 0x01
         self.close_date = close_date
+        self.previous_block = previous_block if previous_block else None
         self.previous_block_hash = previous_block.hash if previous_block else None
         self.merkle_root = None
         self.signer = signer
@@ -112,9 +120,12 @@ class Block(Signable):
         self.guzas = previous_block.guzas if previous_block else guzas
         self.balance = previous_block.balance if previous_block else balance
         self.total = previous_block.total if previous_block else total
-        self.transactions = transactions
-        self.engagements = engagements
+        self.transactions = transactions if transactions else []
+        self.engagements = engagements if engagements else []
         self.hash = None
+
+    def add_transaction(self, tx):
+        self.transactions.append(tx)
 
     def to_hex(self):
         hex_result = f"{self.version:02x}"
@@ -131,9 +142,13 @@ class Block(Signable):
         return hex_result
     
     def compute_merkle_root(self):
-        return self._tx_list_to_merkle_root([t.to_hash() for t in self.transactions])
+        self.merkle_root = self._tx_list_to_merkle_root(
+            [t.to_hash() for t in self.transactions])
+        return self.merkle_root
 
     def _tx_list_to_merkle_root(self, hashlist, firstcall=True):
+        if len(hashlist) == 0:
+            return None
         if len(hashlist) == 1:
             if firstcall:
                 return self._hash_pair(hashlist[0], hashlist[0])
@@ -154,6 +169,16 @@ class Block(Signable):
         bh0 = bytearray.fromhex(hash0)
         bh1 = bytearray.fromhex(hash1)
         return hashlib.sha256(bh0+bh1).hexdigest()
+
+    def compute_transactions(self):
+        self.guzis = self.previous_block.guzis
+        for tx in self.transactions:
+            if tx.tx_type == TxType.GUZI_CREATE.value:
+                self.guzis += tx.amount
+        self.guzas = self.previous_block.guzas
+        for tx in self.transactions:
+            if tx.tx_type == TxType.GUZA_CREATE.value:
+                self.guzas += tx.amount
 
 
 class TxType(Enum):

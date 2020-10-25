@@ -88,6 +88,31 @@ class TestBlock(unittest.TestCase):
         # Assert
         self.assertTrue(vk.verify(signature, data))
 
+    def test_add_transaction(self):
+        # Arrange
+        block = Block()
+        tx = GuziCreationTransaction(EMPTY_HASH, Block())
+
+        # Act
+        block.add_transaction(tx)
+
+        # Assert
+        self.assertEqual(len(block.transactions), 1)
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_compute_merkle_root_0_tx(self):
+        """
+        If there is 0 transaction, merkle root should be None
+        """
+        # Arrange
+        block = Block()
+
+        # Act
+        result = block.compute_merkle_root()
+
+        # Assert
+        self.assertIsNone(result)
+
     @freeze_time("2011-12-13 12:34:56")
     def test_compute_merkle_root_1_tx(self):
         """
@@ -147,6 +172,30 @@ class TestBlock(unittest.TestCase):
 
         # Assert
         self.assertEqual(result, expected_merkle_root)
+
+    def test_compute_transactions_with_1_guzis(self):
+        # Arrange
+        block = Block(previous_block=Block(guzis=0), transactions=[
+            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
+        ])
+
+        # Act
+        block.compute_transactions()
+
+        # Assert
+        self.assertEqual(block.guzis, 1)
+
+    def test_compute_transactions_with_1_guzas(self):
+        # Arrange
+        block = Block(previous_block=Block(guzas=0), transactions=[
+            GuzaCreationTransaction(NEW_USER_PUB_KEY, Block()),
+        ])
+
+        # Act
+        block.compute_transactions()
+
+        # Assert
+        self.assertEqual(block.guzas, 1)
 
 
 class TestGuzi(unittest.TestCase):
@@ -276,9 +325,9 @@ class TestGuzi(unittest.TestCase):
 
         Content of Initialisation block after filling :
             - type : 01
-            - date : Today's date
-            - hash_of_birthday_block : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
-            - empty_merkle_root : TODO
+            - date : 4ee74670
+            - prv_hash : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
+            - merkle_root : 2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38
             - reference_public_key : REF_PUB_KEY
             - guzis : 0001
             - guzas : 0001
@@ -289,12 +338,12 @@ class TestGuzi(unittest.TestCase):
                 - create 1 guzi
                 - create 1 guza
             - engagements count : 0000 
-
         """
         # Arrange
-        # vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
-        # hash = "ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146" 
-        # data = hash.encode()
+        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{REF_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        hash = "0aa48e1a86bf309ea493fb6006e9dcda258cb533f0566ae73c7fc98c9901c5a1" 
+        data = hash.encode()
+        expected_merkle_root = "2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38"
 
         birthdate = datetime(1998, 12, 21)
         blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -305,14 +354,13 @@ class TestGuzi(unittest.TestCase):
         # Assert
         self.assertEqual(init_block.version, 0x01)
         self.assertEqual(init_block.close_date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
-        # self.assertEqual(init_block.merkle_root, EMPTY_HASH)
-        # self.assertEqual(init_block.guzis, 1)
-        # self.assertEqual(init_block.guzas, 1)
-        # self.assertEqual(init_block.balance, 0)
-        # self.assertEqual(init_block.total, 0)
-        # self.assertEqual(init_block.transactions, [])
-        # self.assertEqual(init_block.engagements, [])
-        # self.assertEqual(init_block.hash, EMPTY_HASH)
+        self.assertEqual(init_block.merkle_root, expected_merkle_root)
+        self.assertEqual(init_block.guzis, 1)
+        self.assertEqual(init_block.guzas, 1)
+        self.assertEqual(init_block.balance, 0)
+        self.assertEqual(init_block.total, 0)
+        self.assertEqual(len(init_block.transactions), 2)
+        self.assertTrue(vk.verify(init_block.hash, data))
 
 
 class TestGuziCreationTransaction(unittest.TestCase):
