@@ -126,9 +126,34 @@ class Block(Signable):
         hex_result += f"{self.guzas:04x}"
         hex_result += f"{self.balance:06x}"
         hex_result += f"{self.total:08x}"
-        hex_result += f"{0:04x}" #transactions
-        hex_result += f"{0:04x}" #engagements
+        hex_result += f"{0:04x}" #transactions count
+        hex_result += f"{0:04x}" #engagements count
         return hex_result
+    
+    def compute_merkle_root(self):
+        return self._tx_list_to_merkle_root([t.to_hash() for t in self.transactions])
+
+    def _tx_list_to_merkle_root(self, hashlist, firstcall=True):
+        if len(hashlist) == 1:
+            if firstcall:
+                return self._hash_pair(hashlist[0], hashlist[0])
+            else:
+                return hashlist[0]
+        else:
+            # [h0, h1, h2] => [h0, h1, h2, h2]
+            if len(hashlist) %2 == 1:
+                hashlist.append(hashlist[-1])
+            # [h0, h1, h2, h3, h4, h5] => [(h0, h1), (h2, h3), (h4, h5)]
+            hash_pairs = [(hashlist[i], hashlist[i + 1])  
+                for i in range(0, len(hashlist), 2)]
+            new_hashlist = [self._hash_pair(h0, h1)
+                for h0, h1 in hash_pairs] 
+            return self._tx_list_to_merkle_root(new_hashlist, False)
+
+    def _hash_pair(self, hash0, hash1):
+        bh0 = bytearray.fromhex(hash0)
+        bh1 = bytearray.fromhex(hash1)
+        return hashlib.sha256(bh0+bh1).hexdigest()
 
 
 class TxType(Enum):

@@ -65,7 +65,6 @@ class TestBlock(unittest.TestCase):
         # Assert
         self.assertEqual(result, 'f2fd3898d6a01cf33d71b08c5af00d62edb39570cb04392a3adea7addf207e7f')
 
-
     def test_sign(self):
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{REF_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
@@ -89,6 +88,65 @@ class TestBlock(unittest.TestCase):
         # Assert
         self.assertTrue(vk.verify(signature, data))
 
+    @freeze_time("2011-12-13 12:34:56")
+    def test_compute_merkle_root_1_tx(self):
+        """
+        If there is only 1 transaction, merkle root should be :
+        hash(hash0 + hash0)
+        """
+        # Arrange
+        block = Block(transactions=[
+            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
+        ])
+
+        expected_merkle_root = "4730f782e92376f068cd02f423439091614b9d197408dd6c9a940ea3d16aa7e8"
+
+        # Act
+        result = block.compute_merkle_root()
+
+        # Assert
+        self.assertEqual(result, expected_merkle_root)
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_compute_merkle_root_2_tx(self):
+        """
+        If there are 2 transactions, merkle root should be :
+        hash(hash0 + hash1)
+        """
+        # Arrange
+        block = Block(transactions=[
+            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
+            GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
+        ])
+
+        expected_merkle_root = "2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38"
+
+        # Act
+        result = block.compute_merkle_root()
+
+        # Assert
+        self.assertEqual(result, expected_merkle_root)
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_compute_merkle_root_3_tx(self):
+        """
+        If there are 3 transactions, merkle root should be :
+        hash(hash(hash0 + hash1) + hash(hash3 + hash3))
+        """
+        # Arrange
+        block = Block(transactions=[
+            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
+            GuzaCreationTransaction(NEW_USER_PUB_KEY, Block()),
+            GuzaCreationTransaction(REF_PUB_KEY, Block())
+        ])
+
+        expected_merkle_root = "1a352d61ebaead90edac68ca9509b82d6c56e115d0ad82eacbc2e3ed9f5108ea"
+
+        # Act
+        result = block.compute_merkle_root()
+
+        # Assert
+        self.assertEqual(result, expected_merkle_root)
 
 
 class TestGuzi(unittest.TestCase):
