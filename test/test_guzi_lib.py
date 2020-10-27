@@ -9,7 +9,7 @@ NEW_USER_PUB_KEY = 0x02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76ca
 NEW_USER_PRIV_KEY = 0xcdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6
 REF_PUB_KEY =  0x031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d
 REF_PRIV_KEY = 0x7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca
-EMPTY_HASH = 0x0000000000000000000000000000000000000000000000000000000000000000
+EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
 TEST_HASH = 0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 # Hash of "test"
 
 class TestBlock(unittest.TestCase):
@@ -29,6 +29,7 @@ class TestBlock(unittest.TestCase):
         engagements count: 0000 
         """
         # Arrange
+        data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
         block = Block(
                 close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
                 signer=NEW_USER_PUB_KEY,
@@ -44,7 +45,7 @@ class TestBlock(unittest.TestCase):
         result = block.to_hex()
 
         # Assert
-        self.assertEqual(result, '01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
+        self.assertEqual(result, data)
 
     def test_to_hash(self):
         # Arrange
@@ -63,13 +64,12 @@ class TestBlock(unittest.TestCase):
         result = block.to_hash()
 
         # Assert
-        self.assertEqual(result, 'f2fd3898d6a01cf33d71b08c5af00d62edb39570cb04392a3adea7addf207e7f')
+        self.assertEqual(result, bytes.fromhex('f2fd3898d6a01cf33d71b08c5af00d62edb39570cb04392a3adea7addf207e7f'))
 
     def test_sign(self):
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{REF_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
-        hash = "f2fd3898d6a01cf33d71b08c5af00d62edb39570cb04392a3adea7addf207e7f" 
-        data = hash.encode()
+        data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
 
         block = Block(
                 close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
@@ -124,7 +124,7 @@ class TestBlock(unittest.TestCase):
             GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
         ])
 
-        expected_merkle_root = "4730f782e92376f068cd02f423439091614b9d197408dd6c9a940ea3d16aa7e8"
+        expected_merkle_root = bytes.fromhex("4730f782e92376f068cd02f423439091614b9d197408dd6c9a940ea3d16aa7e8")
 
         # Act
         result = block.compute_merkle_root()
@@ -144,7 +144,7 @@ class TestBlock(unittest.TestCase):
             GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
         ])
 
-        expected_merkle_root = "2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38"
+        expected_merkle_root = bytes.fromhex("2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38")
 
         # Act
         result = block.compute_merkle_root()
@@ -165,7 +165,7 @@ class TestBlock(unittest.TestCase):
             GuzaCreationTransaction(REF_PUB_KEY, Block())
         ])
 
-        expected_merkle_root = "1a352d61ebaead90edac68ca9509b82d6c56e115d0ad82eacbc2e3ed9f5108ea"
+        expected_merkle_root = bytes.fromhex("1a352d61ebaead90edac68ca9509b82d6c56e115d0ad82eacbc2e3ed9f5108ea")
 
         # Act
         result = block.compute_merkle_root()
@@ -270,10 +270,9 @@ class TestGuzi(unittest.TestCase):
 
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
-        hash = "ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146" 
-        data = hash.encode()
+        data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
 
-        birthdate = datetime(1998, 12, 21)
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
 
         # Act
         blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -326,7 +325,7 @@ class TestGuzi(unittest.TestCase):
         Content of Initialisation block after filling :
             - type : 01
             - date : 4ee74670
-            - prv_hash : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
+            - prv_hash : 840eac034a3e5a43d417fc8aa9b35dcd6d4545878e0702c9fb98a10a3e126bee
             - merkle_root : 2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38
             - reference_public_key : REF_PUB_KEY
             - guzis : 0001
@@ -341,12 +340,11 @@ class TestGuzi(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{REF_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
-        hash = "0aa48e1a86bf309ea493fb6006e9dcda258cb533f0566ae73c7fc98c9901c5a1" 
-        data = hash.encode()
-        expected_merkle_root = "2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38"
+        expected_merkle_root = bytes.fromhex("2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38")
 
         birthdate = datetime(1998, 12, 21)
         blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        data = bytes.fromhex('014ee74670'+blocks[0].hash.hex()+'2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d000100010000000000000000020000')
 
         # Act
         _, init_block = fill_init_blocks(blocks, REF_PRIV_KEY)
@@ -381,8 +379,7 @@ class TestGuziCreationTransaction(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
-        hash = "c472bbbe7b2424aaa9b159e181aac5df954f8ea5d6b362c17201facf8b1cf217" 
-        data = hash.encode()
+        data = bytes.fromhex('01004ee7467002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0001')
 
         # Act
         tx = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
@@ -414,8 +411,7 @@ class TestGuzaCreationTransaction(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
-        hash = "9fed68e125157c6aa1607e51e5f3589de850eb4c1e817d829906ce9c86b689ff" 
-        data = hash.encode()
+        data = bytes.fromhex('01014ee7467002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0001')
 
         # Act
         tx = GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())

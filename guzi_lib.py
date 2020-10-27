@@ -4,7 +4,7 @@ import pytz
 from datetime import datetime, date
 from enum import Enum
 
-EMPTY_HASH = 0x0000000000000000000000000000000000000000000000000000000000000000
+EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
 
 def create_empty_init_blocks(birthdate, new_user_pub_key, new_user_priv_key, ref_pub_key):
     """
@@ -42,7 +42,6 @@ def fill_init_blocks(blocks, ref_priv_key):
     init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key, birth_block))
     init_block.compute_transactions()
     init_block.compute_merkle_root()
-    print(ref_priv_key)
     init_block.sign(ref_priv_key)
     return blocks
 
@@ -90,9 +89,7 @@ class Signable:
         raise NotImplemented
 
     def to_hash(self):
-        hex_string = self.to_hex()
-        byte_array = bytearray.fromhex(hex_string)
-        return hashlib.sha256(byte_array).hexdigest()
+        return hashlib.sha256(self.to_hex()).digest()
 
     def sign(self, privkey):
         """
@@ -100,7 +97,8 @@ class Signable:
         return bytes
         """
         sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
-        self.hash = sk.sign(self.to_hash().encode())
+        self.hash = sk.sign(self.to_hex())
+        self.hash_int = int.from_bytes(self.hash, byteorder='big', signed=False)
         return self.hash
 
 
@@ -123,22 +121,23 @@ class Block(Signable):
         self.transactions = transactions if transactions else []
         self.engagements = engagements if engagements else []
         self.hash = None
+        self.hash_int = None
 
     def add_transaction(self, tx):
         self.transactions.append(tx)
 
     def to_hex(self):
-        hex_result = f"{self.version:02x}"
-        hex_result += f"{int(self.close_date.timestamp()):08x}"
-        hex_result += f"{self.previous_block_hash:064x}"
-        hex_result += f"{self.merkle_root:064x}"
-        hex_result += f"{self.signer:066x}"
-        hex_result += f"{self.guzis:04x}"
-        hex_result += f"{self.guzas:04x}"
-        hex_result += f"{self.balance:06x}"
-        hex_result += f"{self.total:08x}"
-        hex_result += f"{0:04x}" #transactions count
-        hex_result += f"{0:04x}" #engagements count
+        hex_result = bytes.fromhex(f"{self.version:02x}")
+        hex_result += bytes.fromhex(f"{int(self.close_date.timestamp()):08x}")
+        hex_result += self.previous_block_hash
+        hex_result += self.merkle_root
+        hex_result += bytes.fromhex(f"{self.signer:066x}")
+        hex_result += bytes.fromhex(f"{self.guzis:04x}")
+        hex_result += bytes.fromhex(f"{self.guzas:04x}")
+        hex_result += bytes.fromhex(f"{self.balance:06x}")
+        hex_result += bytes.fromhex(f"{self.total:08x}")
+        hex_result += bytes.fromhex(f"{len(self.transactions):04x}") #transactions count
+        hex_result += bytes.fromhex(f"{0:04x}") #engagements count
         return hex_result
     
     def compute_merkle_root(self):
@@ -158,7 +157,7 @@ class Block(Signable):
             # [h0, h1, h2] => [h0, h1, h2, h2]
             if len(hashlist) %2 == 1:
                 hashlist.append(hashlist[-1])
-            # [h0, h1, h2, h3, h4, h5] => [(h0, h1), (h2, h3), (h4, h5)]
+            # [h0, h1, h2, h3] => [(h0, h1), (h2, h3)]
             hash_pairs = [(hashlist[i], hashlist[i + 1])  
                 for i in range(0, len(hashlist), 2)]
             new_hashlist = [self._hash_pair(h0, h1)
@@ -166,9 +165,7 @@ class Block(Signable):
             return self._tx_list_to_merkle_root(new_hashlist, False)
 
     def _hash_pair(self, hash0, hash1):
-        bh0 = bytearray.fromhex(hash0)
-        bh1 = bytearray.fromhex(hash1)
-        return hashlib.sha256(bh0+bh1).hexdigest()
+        return hashlib.sha256(hash0+hash1).digest()
 
     def compute_transactions(self):
         self.guzis = self.previous_block.guzis
@@ -231,7 +228,7 @@ class GuziCreationTransaction(Transaction):
         hex_result += f"{int(self.date.timestamp()):08x}"
         hex_result += f"{self.source:066x}"
         hex_result += f"{self.amount:04x}"
-        return hex_result
+        return bytes.fromhex(hex_result)
 
 
 class GuzaCreationTransaction(Transaction):
@@ -261,4 +258,4 @@ class GuzaCreationTransaction(Transaction):
         hex_result += f"{int(self.date.timestamp()):08x}"
         hex_result += f"{self.source:066x}"
         hex_result += f"{self.amount:04x}"
-        return hex_result
+        return bytes.fromhex(hex_result)
