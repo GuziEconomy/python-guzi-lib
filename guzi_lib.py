@@ -4,6 +4,7 @@ import pytz
 from datetime import datetime, date
 from enum import Enum
 
+
 EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
 
 def create_empty_init_blocks(birthdate, new_user_pub_key, new_user_priv_key, ref_pub_key):
@@ -96,7 +97,7 @@ class Signable:
         privkey : int
         return bytes
         """
-        sk = ecdsa.SigningKey.from_string(bytes.fromhex(f"{privkey:064x}"), curve=ecdsa.SECP256k1)
+        sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
         self.hash = sk.sign(self.to_hex())
         self.hash_int = int.from_bytes(self.hash, byteorder='big', signed=False)
         return self.hash
@@ -131,7 +132,7 @@ class Block(Signable):
         hex_result += bytes.fromhex(f"{int(self.close_date.timestamp()):08x}")
         hex_result += self.previous_block_hash
         hex_result += self.merkle_root
-        hex_result += bytes.fromhex(f"{self.signer:066x}")
+        hex_result += self.signer
         hex_result += bytes.fromhex(f"{self.guzis:04x}")
         hex_result += bytes.fromhex(f"{self.guzas:04x}")
         hex_result += bytes.fromhex(f"{self.balance:06x}")
@@ -223,12 +224,12 @@ class GuziCreationTransaction(Transaction):
         super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def to_hex(self):
-        hex_result = f"{self.version:02x}"
-        hex_result += f"{self.tx_type:02x}"
-        hex_result += f"{int(self.date.timestamp()):08x}"
-        hex_result += f"{self.source:066x}"
-        hex_result += f"{self.amount:04x}"
-        return bytes.fromhex(hex_result)
+        hex_result = bytes.fromhex(f"{self.version:02x}")
+        hex_result += bytes.fromhex(f"{self.tx_type:02x}")
+        hex_result += bytes.fromhex(f"{int(self.date.timestamp()):08x}")
+        hex_result += self.source
+        hex_result += bytes.fromhex(f"{self.amount:04x}")
+        return hex_result
 
 
 class GuzaCreationTransaction(Transaction):
@@ -253,9 +254,9 @@ class GuzaCreationTransaction(Transaction):
         super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def to_hex(self):
-        hex_result = f"{self.version:02x}"
-        hex_result += f"{self.tx_type:02x}"
-        hex_result += f"{int(self.date.timestamp()):08x}"
-        hex_result += f"{self.source:066x}"
-        hex_result += f"{self.amount:04x}"
-        return bytes.fromhex(hex_result)
+        hex_result = bytes.fromhex(f"{self.version:02x}")
+        hex_result += bytes.fromhex(f"{self.tx_type:02x}")
+        hex_result += bytes.fromhex(f"{int(self.date.timestamp()):08x}")
+        hex_result += self.source
+        hex_result += bytes.fromhex(f"{self.amount:04x}")
+        return hex_result

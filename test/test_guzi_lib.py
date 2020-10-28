@@ -5,12 +5,12 @@ from freezegun import freeze_time
 import datetime
 from guzi_lib import *
 
-NEW_USER_PUB_KEY = 0x02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b
-NEW_USER_PRIV_KEY = 0xcdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6
-REF_PUB_KEY =  0x031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d
-REF_PRIV_KEY = 0x7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca
+NEW_USER_PUB_KEY = bytes.fromhex("02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b")
+NEW_USER_PRIV_KEY = bytes.fromhex("cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6")
+REF_PUB_KEY =  bytes.fromhex("031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d")
+REF_PRIV_KEY = bytes.fromhex("7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca")
 EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
-TEST_HASH = 0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 # Hash of "test"
+TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08") # Hash of "test"
 
 class TestBlock(unittest.TestCase):
 
@@ -68,7 +68,7 @@ class TestBlock(unittest.TestCase):
 
     def test_sign(self):
         # Arrange
-        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{REF_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
         data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
 
         block = Block(
@@ -269,7 +269,7 @@ class TestGuzi(unittest.TestCase):
         """
 
         # Arrange
-        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
         data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
 
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
@@ -339,7 +339,7 @@ class TestGuzi(unittest.TestCase):
             - engagements count : 0000 
         """
         # Arrange
-        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{REF_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
         expected_merkle_root = bytes.fromhex("2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38")
 
         birthdate = datetime(1998, 12, 21)
@@ -378,7 +378,7 @@ class TestGuziCreationTransaction(unittest.TestCase):
 
         """
         # Arrange
-        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
         data = bytes.fromhex('01004ee7467002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0001')
 
         # Act
@@ -410,7 +410,7 @@ class TestGuzaCreationTransaction(unittest.TestCase):
 
         """
         # Arrange
-        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(f"{NEW_USER_PUB_KEY:066x}"), curve=ecdsa.SECP256k1)
+        vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
         data = bytes.fromhex('01014ee7467002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0001')
 
         # Act
