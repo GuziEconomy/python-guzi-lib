@@ -86,11 +86,11 @@ def send(blockchain, email):
 
 class Signable:
 
-    def to_hex(self):
+    def __bytes__(self):
         raise NotImplemented
 
     def to_hash(self):
-        return hashlib.sha256(self.to_hex()).digest()
+        return hashlib.sha256(bytes(self)).digest()
 
     def sign(self, privkey):
         """
@@ -98,7 +98,7 @@ class Signable:
         return bytes
         """
         sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
-        self.hash = sk.sign(self.to_hex())
+        self.hash = sk.sign(bytes(self))
         self.hash_int = int.from_bytes(self.hash, byteorder='big', signed=False)
         return self.hash
 
@@ -127,7 +127,7 @@ class Block(Signable):
     def add_transaction(self, tx):
         self.transactions.append(tx)
 
-    def to_hex(self):
+    def __bytes__(self):
         hex_result = self.version.to_bytes(1, byteorder='big')
         hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder='big')
         hex_result += self.previous_block_hash
@@ -223,7 +223,7 @@ class GuziCreationTransaction(Transaction):
         amount = 1 # TODO
         super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
-    def to_hex(self):
+    def __bytes__(self):
         hex_result = self.version.to_bytes(1, byteorder='big')
         hex_result += self.tx_type.to_bytes(1, byteorder='big')
         hex_result += int(self.date.timestamp()).to_bytes(4, byteorder='big')
@@ -253,7 +253,7 @@ class GuzaCreationTransaction(Transaction):
         amount = 1 # TODO
         super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
-    def to_hex(self):
+    def __bytes__(self):
         hex_result = self.version.to_bytes(1, byteorder='big')
         hex_result += self.tx_type.to_bytes(1, byteorder='big')
         hex_result += int(self.date.timestamp()).to_bytes(4, byteorder='big')

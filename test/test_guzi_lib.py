@@ -14,7 +14,7 @@ TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6
 
 class TestBlock(unittest.TestCase):
 
-    def test_to_hex(self):
+    def test___bytes__(self):
         """
         Type: 01
         Date (1998/12/21): 367D8F80
@@ -42,7 +42,7 @@ class TestBlock(unittest.TestCase):
         block.merkle_root = EMPTY_HASH
 
         # Act
-        result = block.to_hex()
+        result = bytes(block)
 
         # Assert
         self.assertEqual(result, data)
