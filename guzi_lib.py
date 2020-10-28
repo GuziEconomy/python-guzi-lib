@@ -128,17 +128,17 @@ class Block(Signable):
         self.transactions.append(tx)
 
     def to_hex(self):
-        hex_result = bytes.fromhex(f"{self.version:02x}")
-        hex_result += bytes.fromhex(f"{int(self.close_date.timestamp()):08x}")
+        hex_result = self.version.to_bytes(1, byteorder='big')
+        hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder='big')
         hex_result += self.previous_block_hash
         hex_result += self.merkle_root
         hex_result += self.signer
-        hex_result += bytes.fromhex(f"{self.guzis:04x}")
-        hex_result += bytes.fromhex(f"{self.guzas:04x}")
-        hex_result += bytes.fromhex(f"{self.balance:06x}")
-        hex_result += bytes.fromhex(f"{self.total:08x}")
-        hex_result += bytes.fromhex(f"{len(self.transactions):04x}") #transactions count
-        hex_result += bytes.fromhex(f"{0:04x}") #engagements count
+        hex_result += self.guzis.to_bytes(2, byteorder='big')
+        hex_result += self.guzas.to_bytes(2, byteorder='big')
+        hex_result += self.balance.to_bytes(3, byteorder='big')
+        hex_result += self.total.to_bytes(4, byteorder='big')
+        hex_result += len(self.transactions) .to_bytes(2, byteorder='big')#transactions count
+        hex_result += (0).to_bytes(2, byteorder='big') #engagements count
         return hex_result
     
     def compute_merkle_root(self):
@@ -224,11 +224,11 @@ class GuziCreationTransaction(Transaction):
         super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def to_hex(self):
-        hex_result = bytes.fromhex(f"{self.version:02x}")
-        hex_result += bytes.fromhex(f"{self.tx_type:02x}")
-        hex_result += bytes.fromhex(f"{int(self.date.timestamp()):08x}")
+        hex_result = self.version.to_bytes(1, byteorder='big')
+        hex_result += self.tx_type.to_bytes(1, byteorder='big')
+        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder='big')
         hex_result += self.source
-        hex_result += bytes.fromhex(f"{self.amount:04x}")
+        hex_result += self.amount.to_bytes(2, byteorder='big')
         return hex_result
 
 
@@ -254,9 +254,9 @@ class GuzaCreationTransaction(Transaction):
         super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def to_hex(self):
-        hex_result = bytes.fromhex(f"{self.version:02x}")
-        hex_result += bytes.fromhex(f"{self.tx_type:02x}")
-        hex_result += bytes.fromhex(f"{int(self.date.timestamp()):08x}")
+        hex_result = self.version.to_bytes(1, byteorder='big')
+        hex_result += self.tx_type.to_bytes(1, byteorder='big')
+        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder='big')
         hex_result += self.source
-        hex_result += bytes.fromhex(f"{self.amount:04x}")
+        hex_result += self.amount.to_bytes(2, byteorder='big')
         return hex_result
