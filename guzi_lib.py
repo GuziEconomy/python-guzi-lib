@@ -6,6 +6,14 @@ from enum import Enum
 
 
 EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
+ENDIAN = 'big'
+
+
+class TxType(Enum):
+    GUZI_CREATE = 0x00
+    GUZA_CREATE = 0x01
+
+
 
 def create_empty_init_blocks(birthdate, new_user_pub_key, new_user_priv_key, ref_pub_key):
     """
@@ -99,7 +107,6 @@ class Signable:
         """
         sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
         self.hash = sk.sign(bytes(self))
-        self.hash_int = int.from_bytes(self.hash, byteorder='big', signed=False)
         return self.hash
 
 
@@ -122,23 +129,22 @@ class Block(Signable):
         self.transactions = transactions if transactions else []
         self.engagements = engagements if engagements else []
         self.hash = None
-        self.hash_int = None
 
     def add_transaction(self, tx):
         self.transactions.append(tx)
 
     def __bytes__(self):
-        hex_result = self.version.to_bytes(1, byteorder='big')
-        hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder='big')
+        hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
+        hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder=ENDIAN)
         hex_result += self.previous_block_hash
         hex_result += self.merkle_root
         hex_result += self.signer
-        hex_result += self.guzis.to_bytes(2, byteorder='big')
-        hex_result += self.guzas.to_bytes(2, byteorder='big')
-        hex_result += self.balance.to_bytes(3, byteorder='big')
-        hex_result += self.total.to_bytes(4, byteorder='big')
-        hex_result += len(self.transactions) .to_bytes(2, byteorder='big')#transactions count
-        hex_result += (0).to_bytes(2, byteorder='big') #engagements count
+        hex_result += self.guzis.to_bytes(2, byteorder=ENDIAN)
+        hex_result += self.guzas.to_bytes(2, byteorder=ENDIAN)
+        hex_result += self.balance.to_bytes(3, byteorder=ENDIAN)
+        hex_result += self.total.to_bytes(4, byteorder=ENDIAN)
+        hex_result += len(self.transactions) .to_bytes(2, byteorder=ENDIAN)#transactions count
+        hex_result += (0).to_bytes(2, byteorder=ENDIAN) #engagements count
         return hex_result
     
     def compute_merkle_root(self):
@@ -177,11 +183,6 @@ class Block(Signable):
         for tx in self.transactions:
             if tx.tx_type == TxType.GUZA_CREATE.value:
                 self.guzas += tx.amount
-
-
-class TxType(Enum):
-    GUZI_CREATE = 0x00
-    GUZA_CREATE = 0x01
 
 
 class Transaction(Signable):
@@ -224,11 +225,11 @@ class GuziCreationTransaction(Transaction):
         super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def __bytes__(self):
-        hex_result = self.version.to_bytes(1, byteorder='big')
-        hex_result += self.tx_type.to_bytes(1, byteorder='big')
-        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder='big')
+        hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
+        hex_result += self.tx_type.to_bytes(1, byteorder=ENDIAN)
+        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder=ENDIAN)
         hex_result += self.source
-        hex_result += self.amount.to_bytes(2, byteorder='big')
+        hex_result += self.amount.to_bytes(2, byteorder=ENDIAN)
         return hex_result
 
 
@@ -254,9 +255,9 @@ class GuzaCreationTransaction(Transaction):
         super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def __bytes__(self):
-        hex_result = self.version.to_bytes(1, byteorder='big')
-        hex_result += self.tx_type.to_bytes(1, byteorder='big')
-        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder='big')
+        hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
+        hex_result += self.tx_type.to_bytes(1, byteorder=ENDIAN)
+        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder=ENDIAN)
         hex_result += self.source
-        hex_result += self.amount.to_bytes(2, byteorder='big')
+        hex_result += self.amount.to_bytes(2, byteorder=ENDIAN)
         return hex_result
