@@ -12,6 +12,145 @@ REF_PRIV_KEY = bytes.fromhex("7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff8
 EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
 TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08") # Hash of "test"
 
+class TestBlockchain(unittest.TestCase):
+
+    def test_start_should_create_rmpty_block(self):
+        """
+
+        When a user creates his account, he creates 2 blocks :
+        1. The first block is called the birthday block and contains the public
+        key of this newly created user plus his birthday date.
+        2. The second block contains the first Guzis (and Guzas) creation, and
+        is signed by the reference.
+        A reference is a person or an entity in whose a group of user gives
+        confidence.
+
+        Blockchain.start() creates blocks with empty data to be filled by
+        the reference (if reference accepts to sign, of course).
+
+        Content of Birthday block :
+            In bytes :
+            - type : 01
+            - date : 367D8F80
+            - empty hash : EMPTY_HASH
+            - empty merkle : EMPTY_HASH
+            - user id : NEW_USER_PUB_KEY
+            - guzis : 0000
+            - guzas : 0000
+            - balance : 000000
+            - total : 00000000
+            - transactions count : 0000
+            - engagements count : 0000 
+        Initialisation block :
+            - type : 01
+            - date : None
+            - hash_of_birthday_block : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
+            - empty_merkle_root : EMPTY_HASH
+            - reference_public_key : REF_PUB_KEY
+            - guzis : 0000
+            - guzas : 0000
+            - balance : 000000
+            - total : 00000000
+            - transactions count : 0000
+            - engagements count : 0000 
+
+        """
+
+        # Arrange
+        vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
+        data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
+
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        
+        # Act
+        bc = Blockchain()
+        bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        birthday_block = bc[0]
+        init_block = bc[1]
+
+        # Assert
+        self.assertEqual(birthday_block.version, 0x01)
+        self.assertEqual(birthday_block.close_date, birthdate)
+        self.assertEqual(birthday_block.previous_block_hash, EMPTY_HASH)
+        self.assertEqual(birthday_block.merkle_root, EMPTY_HASH)
+        self.assertEqual(birthday_block.signer, NEW_USER_PUB_KEY)
+        self.assertEqual(birthday_block.guzis, 0)
+        self.assertEqual(birthday_block.guzas, 0)
+        self.assertEqual(birthday_block.balance, 0)
+        self.assertEqual(birthday_block.total, 0)
+        self.assertEqual(birthday_block.transactions, [])
+        self.assertEqual(birthday_block.engagements, [])
+        self.assertTrue(vk.verify(birthday_block.hash, data))
+
+        self.assertEqual(init_block.version, 0x01)
+        self.assertEqual(init_block.close_date, None)
+        self.assertEqual(init_block.previous_block_hash, birthday_block.hash)
+        self.assertEqual(init_block.merkle_root, EMPTY_HASH)
+        self.assertEqual(init_block.signer, REF_PUB_KEY)
+        self.assertEqual(init_block.guzis, 0)
+        self.assertEqual(init_block.guzas, 0)
+        self.assertEqual(init_block.balance, 0)
+        self.assertEqual(init_block.total, 0)
+        self.assertEqual(init_block.transactions, [])
+        self.assertEqual(init_block.engagements, [])
+        self.assertEqual(init_block.hash, EMPTY_HASH)
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_validate_should_fill_init_blocks(self):
+        """
+
+        When reference receive an empty init blocks (with birthday block and
+        init block), he must fill the init block with correct data, sign the
+        block and send it back to newly created user. And then, new user can
+        have transactions, isn't that beautiful ? Yes it is !
+
+        Data to fill :
+        - signature date
+        - initialisation transactions (1st Guzi & 1st Guza)
+        - Merkle root associated
+        - Signed hash of this block
+
+        Content of Initialisation block after filling :
+            - type : 01
+            - date : 4ee74670
+            - prv_hash : 840eac034a3e5a43d417fc8aa9b35dcd6d4545878e0702c9fb98a10a3e126bee
+            - merkle_root : 2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38
+            - reference_public_key : REF_PUB_KEY
+            - guzis : 0001
+            - guzas : 0001
+            - balance : 000000
+            - total : 00000000
+            - transactions count : 0002
+            - transactions :
+                - create 1 guzi
+                - create 1 guza
+            - engagements count : 0000 
+        """
+        # Arrange
+        vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
+        expected_merkle_root = bytes.fromhex("2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38")
+
+        birthdate = datetime(1998, 12, 21)
+        bc = Blockchain()
+        bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        data = bytes.fromhex('014ee74670'+bc[0].hash.hex()+'2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d000100010000000000000000020000')
+
+        # Act
+        bc.validate(REF_PRIV_KEY)
+        init_block = bc[1]
+        
+        # Assert
+        self.assertEqual(init_block.version, 0x01)
+        self.assertEqual(init_block.close_date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
+        self.assertEqual(init_block.merkle_root, expected_merkle_root)
+        self.assertEqual(init_block.guzis, 1)
+        self.assertEqual(init_block.guzas, 1)
+        self.assertEqual(init_block.balance, 0)
+        self.assertEqual(init_block.total, 0)
+        self.assertEqual(len(init_block.transactions), 2)
+        self.assertTrue(vk.verify(init_block.hash, data))
+
+
 class TestBlock(unittest.TestCase):
 
     def test___bytes__(self):
@@ -196,169 +335,6 @@ class TestBlock(unittest.TestCase):
 
         # Assert
         self.assertEqual(block.guzas, 1)
-
-
-class TestGuzi(unittest.TestCase):
-
-    def test_create_empty_block(self):
-        # Arrange
-        previous_block = Block()
-        previous_block.hash = "aaa"
-        previous_block.guzis = 1
-        previous_block.guzas = 2
-        previous_block.balance = 3
-        previous_block.total = 4
-        
-        # Act
-        new_block = create_empty_block(previous_block)
-        
-        # Assert
-        self.assertEqual(new_block.version, 0x01)
-        self.assertEqual(new_block.close_date, None)
-        self.assertEqual(new_block.previous_block_hash, "aaa")
-        self.assertEqual(new_block.merkle_root, None)
-        self.assertEqual(new_block.signer, None)
-        self.assertEqual(new_block.guzis, 1)
-        self.assertEqual(new_block.guzas, 2)
-        self.assertEqual(new_block.balance, 3)
-        self.assertEqual(new_block.total, 4)
-        self.assertEqual(new_block.transactions, [])
-        self.assertEqual(new_block.engagements, [])
-        self.assertEqual(new_block.hash, None)
-
-    def test_create_empty_init_blocks(self):
-        """
-
-        When a user creates his account, he creates 2 blocks :
-        1. The first block is called the birthday block and contains the public
-        key of this newly created user plus his birthday date.
-        2. The second block contains the first Guzis (and Guzas) creation, and
-        is signed by the reference.
-        A reference is a person or an entity in whose a group of user gives
-        confidence.
-
-        create_empty_init_blocks create blocks with empty data to be filled by
-        the reference (if reference accepts to sign, of course).
-
-        Content of Birthday block :
-            In bytes :
-            - type : 01
-            - date : 367D8F80
-            - empty hash : EMPTY_HASH
-            - empty merkle : EMPTY_HASH
-            - user id : NEW_USER_PUB_KEY
-            - guzis : 0000
-            - guzas : 0000
-            - balance : 000000
-            - total : 00000000
-            - transactions count : 0000
-            - engagements count : 0000 
-        Initialisation block :
-            - type : 01
-            - date : None
-            - hash_of_birthday_block : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
-            - empty_merkle_root : EMPTY_HASH
-            - reference_public_key : REF_PUB_KEY
-            - guzis : 0000
-            - guzas : 0000
-            - balance : 000000
-            - total : 00000000
-            - transactions count : 0000
-            - engagements count : 0000 
-
-        """
-
-        # Arrange
-        vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
-        data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
-
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
-
-        # Act
-        blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        birthday_block, init_block = blocks
-        
-        # Assert
-        self.assertEqual(len(blocks), 2)
-
-        self.assertEqual(birthday_block.version, 0x01)
-        self.assertEqual(birthday_block.close_date, birthdate)
-        self.assertEqual(birthday_block.previous_block_hash, EMPTY_HASH)
-        self.assertEqual(birthday_block.merkle_root, EMPTY_HASH)
-        self.assertEqual(birthday_block.signer, NEW_USER_PUB_KEY)
-        self.assertEqual(birthday_block.guzis, 0)
-        self.assertEqual(birthday_block.guzas, 0)
-        self.assertEqual(birthday_block.balance, 0)
-        self.assertEqual(birthday_block.total, 0)
-        self.assertEqual(birthday_block.transactions, [])
-        self.assertEqual(birthday_block.engagements, [])
-        self.assertTrue(vk.verify(birthday_block.hash, data))
-
-        self.assertEqual(init_block.version, 0x01)
-        self.assertEqual(init_block.close_date, None)
-        self.assertEqual(init_block.previous_block_hash, birthday_block.hash)
-        self.assertEqual(init_block.merkle_root, EMPTY_HASH)
-        self.assertEqual(init_block.signer, REF_PUB_KEY)
-        self.assertEqual(init_block.guzis, 0)
-        self.assertEqual(init_block.guzas, 0)
-        self.assertEqual(init_block.balance, 0)
-        self.assertEqual(init_block.total, 0)
-        self.assertEqual(init_block.transactions, [])
-        self.assertEqual(init_block.engagements, [])
-        self.assertEqual(init_block.hash, EMPTY_HASH)
-
-    @freeze_time("2011-12-13 12:34:56")
-    def test_fill_init_blocks(self):
-        """
-
-        When reference receive an empty init blocks (with birthday block and
-        init block), he must fill the init block with correct data, sign the
-        block and send it back to newly created user. And then, new user can
-        have transactions, isn't that beautiful ? Yes it is !
-
-        Data to fill :
-        - signature date
-        - initialisation transactions (1st Guzi & 1st Guza)
-        - Merkle root associated
-        - Signed hash of this block
-
-        Content of Initialisation block after filling :
-            - type : 01
-            - date : 4ee74670
-            - prv_hash : 840eac034a3e5a43d417fc8aa9b35dcd6d4545878e0702c9fb98a10a3e126bee
-            - merkle_root : 2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38
-            - reference_public_key : REF_PUB_KEY
-            - guzis : 0001
-            - guzas : 0001
-            - balance : 000000
-            - total : 00000000
-            - transactions count : 0002
-            - transactions :
-                - create 1 guzi
-                - create 1 guza
-            - engagements count : 0000 
-        """
-        # Arrange
-        vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
-        expected_merkle_root = bytes.fromhex("2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38")
-
-        birthdate = datetime(1998, 12, 21)
-        blocks = create_empty_init_blocks(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        data = bytes.fromhex('014ee74670'+blocks[0].hash.hex()+'2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d000100010000000000000000020000')
-
-        # Act
-        _, init_block = fill_init_blocks(blocks, REF_PRIV_KEY)
-        
-        # Assert
-        self.assertEqual(init_block.version, 0x01)
-        self.assertEqual(init_block.close_date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
-        self.assertEqual(init_block.merkle_root, expected_merkle_root)
-        self.assertEqual(init_block.guzis, 1)
-        self.assertEqual(init_block.guzas, 1)
-        self.assertEqual(init_block.balance, 0)
-        self.assertEqual(init_block.total, 0)
-        self.assertEqual(len(init_block.transactions), 2)
-        self.assertTrue(vk.verify(init_block.hash, data))
 
 
 class TestGuziCreationTransaction(unittest.TestCase):

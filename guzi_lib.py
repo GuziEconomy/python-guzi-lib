@@ -13,54 +13,6 @@ class TxType(Enum):
     GUZI_CREATE = 0x00
     GUZA_CREATE = 0x01
 
-
-
-def create_empty_init_blocks(birthdate, new_user_pub_key, new_user_priv_key, ref_pub_key):
-    """
-    Return Block[]
-    """
-    birthday_block = Block(
-            close_date=birthdate,
-            signer=new_user_pub_key,
-            guzis=0,
-            guzas=0,
-            balance=0,
-            total=0)
-    birthday_block.previous_block_hash = EMPTY_HASH
-    birthday_block.merkle_root = EMPTY_HASH
-    birthday_block.sign(new_user_priv_key)
-    init_block = Block(
-            previous_block=birthday_block,
-            signer=ref_pub_key,
-            guzis=0,
-            guzas=0,
-            balance=0,
-            total=0)
-    init_block.merkle_root =  EMPTY_HASH
-    init_block.hash =  EMPTY_HASH
-    return [birthday_block, init_block]
-
-def fill_init_blocks(blocks, ref_priv_key):
-    """
-    Return Block[]
-    """
-    birth_block, init_block = blocks
-    init_block.close_date = datetime.now(tz=pytz.utc)
-    new_user_pub_key = birth_block.signer
-    init_block.add_transaction(GuziCreationTransaction(new_user_pub_key, birth_block))
-    init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key, birth_block))
-    init_block.compute_transactions()
-    init_block.compute_merkle_root()
-    init_block.sign(ref_priv_key)
-    return blocks
-
-def create_empty_block(previous_block):
-    """
-    Return Block
-    """
-    block = Block(previous_block=previous_block)
-    return block
-
 def create_transaction(tx_type, source, amount, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
     """
     Return Transaction
@@ -92,8 +44,32 @@ def send(blockchain, email):
     pass
 
 
-class Signable:
+class Blockchain(list):
+    def start(self, birthdate, new_pubkey, new_privkey, ref_pubkey):
+        self.append(BirthBlock(birthdate, new_pubkey, new_privkey))
+        init_block = Block(
+                previous_block=self[0],
+                signer=ref_pubkey,
+                guzis=0,
+                guzas=0,
+                balance=0,
+                total=0)
+        init_block.merkle_root =  EMPTY_HASH
+        init_block.hash =  EMPTY_HASH
+        self.append(init_block)
 
+    def validate(self, ref_privkey):
+        birth_block = self[0]
+        init_block = self[1]
+        init_block.close_date = datetime.now(tz=pytz.utc)
+        new_user_pub_key = birth_block.signer
+        init_block.add_transaction(GuziCreationTransaction(new_user_pub_key, birth_block))
+        init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key, birth_block))
+        init_block.compute_transactions()
+        init_block.compute_merkle_root()
+        init_block.sign(ref_privkey)
+
+class Signable:
     def __bytes__(self):
         raise NotImplemented
 
@@ -111,7 +87,6 @@ class Signable:
 
 
 class Block(Signable):
-
     def __init__(self,
             close_date=None, previous_block=None, signer=None,
             guzis=-1, guzas=-1, balance=-1, total=-1,
@@ -185,8 +160,19 @@ class Block(Signable):
                 self.guzas += tx.amount
 
 
-class Transaction(Signable):
+class BirthBlock(Block):
+    def __init__(self, birthdate, new_user_pub_key, new_user_priv_key):
+        super().__init__(
+                close_date=birthdate,
+                signer=new_user_pub_key,
+                guzis=0, guzas=0,
+                balance=0, total=0)
+        self.previous_block_hash = EMPTY_HASH
+        self.merkle_root = EMPTY_HASH
+        self.sign(new_user_priv_key)
 
+
+class Transaction(Signable):
     def __init__(self, tx_type, source, amount, tx_date=None, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
 
         self.version = 1
