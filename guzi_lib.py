@@ -13,36 +13,6 @@ class TxType(Enum):
     GUZI_CREATE = 0x00
     GUZA_CREATE = 0x01
 
-def create_transaction(tx_type, source, amount, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
-    """
-    Return Transaction
-    """
-    pass
-
-def add_transaction_to_block(transaction, block):
-    """
-    Return Block
-    """
-    pass
-
-def close_block(blockchain):
-    """
-    Return Block
-    """
-    pass
-
-def calculate_merkle_root(block):
-    """
-    Return Hash
-    """
-    pass
-
-def create_daily_guzis(last_block):
-    pass
-
-def send(blockchain, email):
-    pass
-
 
 class Blockchain(list):
     def start(self, birthdate, new_pubkey, new_privkey, ref_pubkey):
@@ -68,6 +38,16 @@ class Blockchain(list):
         init_block.compute_transactions()
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
+
+    def save_to_file(self, outfile):
+        """
+        Save the content of the Blockchain to the given file
+        """
+        content = b''
+        for block in self:
+            content += bytes(block)
+        outfile.write(content)
+
 
 class Signable:
     def __bytes__(self):
@@ -110,7 +90,7 @@ class Block(Signable):
 
     def __bytes__(self):
         hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
-        hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder=ENDIAN)
+        hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder=ENDIAN) if self.close_date else 0x0000.to_bytes(4, byteorder=ENDIAN)
         hex_result += self.previous_block_hash
         hex_result += self.merkle_root
         hex_result += self.signer

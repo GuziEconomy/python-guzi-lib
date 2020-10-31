@@ -1,8 +1,11 @@
 import unittest
 import pytz
 import ecdsa
+
+from io import BytesIO
 from freezegun import freeze_time
 import datetime
+
 from guzi_lib import *
 
 NEW_USER_PUB_KEY = bytes.fromhex("02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b")
@@ -14,7 +17,7 @@ TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6
 
 class TestBlockchain(unittest.TestCase):
 
-    def test_start_should_create_rmpty_block(self):
+    def test_start_should_create_empty_block(self):
         """
 
         When a user creates his account, he creates 2 blocks :
@@ -149,6 +152,37 @@ class TestBlockchain(unittest.TestCase):
         self.assertEqual(init_block.total, 0)
         self.assertEqual(len(init_block.transactions), 2)
         self.assertTrue(vk.verify(init_block.hash, data))
+        
+    ##def test_sign_last_block(self):
+    ##    # Arrange
+    ##    vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
+
+    ##    # Act
+    ##    bc.sign_last_block(signer_privkey)
+
+    ##    # Assert
+    ##    self.assertTrue(vk.verify(bc[-1].hash, data))
+
+class TestBlockchainSaveToFile(unittest.TestCase):
+    @freeze_time("2011-12-13 12:34:56")
+    def test_hex_format(self):
+        # Arrange
+        data1 = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0000000000000000000000000000000100000000')
+        data2 = bytes.fromhex('0000000000000000000000000000000000000000000000000000000000000000031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d000000000000000000000000000000')
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        bc = Blockchain()
+        bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+
+        outfile = BytesIO()
+
+        # Act
+        bc.save_to_file(outfile)
+        outfile.seek(0)
+        content = outfile.read()
+
+        # Assert
+        self.assertIn(data1, content)
+        self.assertIn(data2, content)
 
 
 class TestBlock(unittest.TestCase):
