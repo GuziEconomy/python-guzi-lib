@@ -1,8 +1,10 @@
 import hashlib
 import ecdsa
 import pytz
+import umsgpack
 from datetime import datetime, date
 from enum import Enum
+
 
 
 EMPTY_HASH = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
@@ -15,6 +17,17 @@ class TxType(Enum):
 
 
 class Blockchain(list):
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            if len(self) !=len(other):
+                return False
+            for b1, b2 in zip(self, other):
+                if b1 != b2:
+                    return False
+            return True
+        else:
+            return False
+
     def start(self, birthdate, new_pubkey, new_privkey, ref_pubkey):
         self.append(BirthBlock(birthdate, new_pubkey, new_privkey))
         init_block = Block(
@@ -47,6 +60,10 @@ class Blockchain(list):
         for block in self:
             content += bytes(block)
         outfile.write(content)
+
+    def load_from_file(self, infile):
+        # TODO : add load_from_bytes to Block and use it here
+        self.version = infile.read(1)
 
 
 class Signable:
@@ -85,22 +102,26 @@ class Block(Signable):
         self.engagements = engagements if engagements else []
         self.hash = None
 
+    def __eq__(self, other):
+        return self.to_hash() == other.to_hash()
+
     def add_transaction(self, tx):
         self.transactions.append(tx)
 
     def __bytes__(self):
-        hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
-        hex_result += int(self.close_date.timestamp()).to_bytes(4, byteorder=ENDIAN) if self.close_date else 0x0000.to_bytes(4, byteorder=ENDIAN)
-        hex_result += self.previous_block_hash
-        hex_result += self.merkle_root
-        hex_result += self.signer
-        hex_result += self.guzis.to_bytes(2, byteorder=ENDIAN)
-        hex_result += self.guzas.to_bytes(2, byteorder=ENDIAN)
-        hex_result += self.balance.to_bytes(3, byteorder=ENDIAN)
-        hex_result += self.total.to_bytes(4, byteorder=ENDIAN)
-        hex_result += len(self.transactions) .to_bytes(2, byteorder=ENDIAN)#transactions count
-        hex_result += (0).to_bytes(2, byteorder=ENDIAN) #engagements count
-        return hex_result
+        return umsgpack.packb([
+            1, # Type
+            self.close_date.timestamp() if self.close_date else 0,
+            self.previous_block_hash,
+            self.merkle_root,
+            self.signer,
+            self.guzis, 
+            self.guzas,
+            self.balance,
+            self.total,
+            len(self.transactions),
+            len(self.engagements)
+        ])
     
     def compute_merkle_root(self):
         self.merkle_root = self._tx_list_to_merkle_root(
@@ -191,12 +212,13 @@ class GuziCreationTransaction(Transaction):
         super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def __bytes__(self):
-        hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
-        hex_result += self.tx_type.to_bytes(1, byteorder=ENDIAN)
-        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder=ENDIAN)
-        hex_result += self.source
-        hex_result += self.amount.to_bytes(2, byteorder=ENDIAN)
-        return hex_result
+        return umsgpack.packb([
+            self.version,
+            self.tx_type,
+            self.date.timestamp(),
+            self.source,
+            self.amount
+        ])
 
 
 class GuzaCreationTransaction(Transaction):
@@ -221,9 +243,10 @@ class GuzaCreationTransaction(Transaction):
         super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
     def __bytes__(self):
-        hex_result = self.version.to_bytes(1, byteorder=ENDIAN)
-        hex_result += self.tx_type.to_bytes(1, byteorder=ENDIAN)
-        hex_result += int(self.date.timestamp()).to_bytes(4, byteorder=ENDIAN)
-        hex_result += self.source
-        hex_result += self.amount.to_bytes(2, byteorder=ENDIAN)
-        return hex_result
+        return umsgpack.packb([
+            self.version,
+            self.tx_type,
+            self.date.timestamp(),
+            self.source,
+            self.amount
+        ])
