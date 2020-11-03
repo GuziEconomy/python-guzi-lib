@@ -15,9 +15,9 @@ REF_PRIV_KEY = bytes.fromhex("7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff8
 EMPTY_HASH = 0
 TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08") # Hash of "test"
 
-class TestBlockchain(unittest.TestCase):
+class TestBlockchainStart(unittest.TestCase):
 
-    def test_start_should_create_empty_block(self):
+    def test_should_create_empty_block(self):
         """
 
         When a user creates his account, he creates 2 blocks :
@@ -33,29 +33,29 @@ class TestBlockchain(unittest.TestCase):
 
         Content of Birthday block :
             In bytes :
-            - type : 1
-            - Date (1998/12/21): 914198400.0
-            - empty hash : EMPTY_HASH
-            - empty merkle : EMPTY_HASH
-            - user id : NEW_USER_PUB_KEY
-            - guzis : 0
-            - guzas : 0
-            - balance : 0
-            - total : 0
-            - transactions count : 0
-            - engagements count : 0 
+            Type : 1
+            Date (1998/12/21): 914198400.0
+            empty hash : EMPTY_HASH
+            empty merkle : EMPTY_HASH
+            user id : NEW_USER_PUB_KEY
+            guzis : 0
+            guzas : 0
+            balance : 0
+            total : 0
+            transactions count : 0
+            engagements count : 0 
         Initialisation block :
-            - type : 01
-            - date : None
-            - hash_of_birthday_block : ae0810100c034105cab7df985befd1d7042333682bcab09397b5bcadf370e146
-            - empty_merkle_root : EMPTY_HASH
-            - reference_public_key : REF_PUB_KEY
-            - guzis : 0000
-            - guzas : 0000
-            - balance : 000000
-            - total : 00000000
-            - transactions count : 0000
-            - engagements count : 0000 
+            type : 01
+            date : None
+            hash_of_birthday_block : XXX
+            empty_merkle_root : EMPTY_HASH
+            reference_public_key : REF_PUB_KEY
+            guzis : 0
+            guzas : 0
+            balance : 0
+            total : 0
+            transactions count : 0
+            engagements count : 0 
 
         """
 
@@ -68,8 +68,7 @@ class TestBlockchain(unittest.TestCase):
         # Act
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        birthday_block = bc[0]
-        init_block = bc[1]
+        birthday_block, init_block = bc
 
         # Assert
         self.assertEqual(birthday_block.version, 0x01)
@@ -98,6 +97,9 @@ class TestBlockchain(unittest.TestCase):
         self.assertEqual(init_block.engagements, [])
         self.assertEqual(init_block.hash, EMPTY_HASH)
 
+
+class TestBlockchainValidate(unittest.TestCase):
+
     @freeze_time("2011-12-13 12:34:56")
     def test_validate_should_fill_init_blocks(self):
         """
@@ -114,20 +116,20 @@ class TestBlockchain(unittest.TestCase):
         - Signed hash of this block
 
         Content of Initialisation block after filling :
-            - type : 01
-            - date : 4ee74670
-            - prv_hash : 840eac034a3e5a43d417fc8aa9b35dcd6d4545878e0702c9fb98a10a3e126bee
-            - merkle_root : 2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38
-            - reference_public_key : REF_PUB_KEY
-            - guzis : 1
-            - guzas : 1
-            - balance : 0
-            - total : 0
-            - transactions count : 2
-            - transactions :
+            Type : 1
+            Date (1998/12/21): 914198400.0
+            prv_hash : XXX
+            merkle_root : XXX
+            reference_public_key : REF_PUB_KEY
+            guzis : 1
+            guzas : 1
+            balance : 0
+            total : 0
+            transactions count : 2
+            transactions :
                 - create 1 guzi
                 - create 1 guza
-            - engagements count : 0
+            engagements count : 0
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
@@ -152,15 +154,6 @@ class TestBlockchain(unittest.TestCase):
         self.assertEqual(len(init_block.transactions), 2)
         self.assertTrue(vk.verify(init_block.hash, data))
         
-    ##def test_sign_last_block(self):
-    ##    # Arrange
-    ##    vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
-
-    ##    # Act
-    ##    bc.sign_last_block(signer_privkey)
-
-    ##    # Assert
-    ##    self.assertTrue(vk.verify(bc[-1].hash, data))
 
 class TestBlockchainEq(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
