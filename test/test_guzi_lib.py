@@ -12,7 +12,7 @@ NEW_USER_PUB_KEY = bytes.fromhex("02071205369c6131b7abaafebedfda83fae72232746bdf
 NEW_USER_PRIV_KEY = bytes.fromhex("cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6")
 REF_PUB_KEY =  bytes.fromhex("031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d")
 REF_PRIV_KEY = bytes.fromhex("7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca")
-EMPTY_HASH = 0x0
+EMPTY_HASH = 0
 TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08") # Hash of "test"
 
 class TestBlockchain(unittest.TestCase):
@@ -33,17 +33,17 @@ class TestBlockchain(unittest.TestCase):
 
         Content of Birthday block :
             In bytes :
-            - type : 01
-            - date : 367D8F80
+            - type : 1
+            - Date (1998/12/21): 914198400.0
             - empty hash : EMPTY_HASH
             - empty merkle : EMPTY_HASH
             - user id : NEW_USER_PUB_KEY
-            - guzis : 0000
-            - guzas : 0000
-            - balance : 000000
-            - total : 00000000
-            - transactions count : 0000
-            - engagements count : 0000 
+            - guzis : 0
+            - guzas : 0
+            - balance : 0
+            - total : 0
+            - transactions count : 0
+            - engagements count : 0 
         Initialisation block :
             - type : 01
             - date : None
@@ -61,7 +61,7 @@ class TestBlockchain(unittest.TestCase):
 
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
-        data = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000000000000000000000')
+        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
 
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
         
@@ -131,19 +131,18 @@ class TestBlockchain(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
-        expected_merkle_root = bytes.fromhex("2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38")
+        expected_merkle_root = bytes.fromhex("dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8")
 
         birthdate = datetime(1998, 12, 21)
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        data = bytes.fromhex('014ee74670'+bc[0].hash.hex()+'2f8ef4cb859a9c88806dcb5f96cdc9d755da483b79faf93e834afd2fedd01a38031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d000100010000000000000000020000')
-
+        data = bytes.fromhex('9b01cb41d3b9d19c000000c440'+bc[0].hash.hex()+'c420dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8c421031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d010100000200')
         # Act
         bc.validate(REF_PRIV_KEY)
         init_block = bc[1]
         
         # Assert
-        self.assertEqual(init_block.version, 0x01)
+        self.assertEqual(init_block.version, 1)
         self.assertEqual(init_block.close_date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
         self.assertEqual(init_block.merkle_root, expected_merkle_root)
         self.assertEqual(init_block.guzis, 1)
