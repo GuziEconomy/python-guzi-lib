@@ -56,14 +56,14 @@ class Blockchain(list):
         """
         Save the content of the Blockchain to the given file
         """
-        content = b''
-        for block in self:
-            content += bytes(block)
-        outfile.write(content)
+        umsgpack.pack([bytes(b) for b in self], outfile)
 
     def load_from_file(self, infile):
-        # TODO : add load_from_bytes to Block and use it here
-        self.version = infile.read(1)
+        hashed_blocks = umsgpack.unpack(infile)
+        for b in hashed_blocks:
+            block = Block()
+            block.from_bytes(b)
+            self.append(block)
 
 
 class Signable:
@@ -84,6 +84,7 @@ class Signable:
 
 
 class Block(Signable):
+
     def __init__(self,
             close_date=None, previous_block=None, signer=None,
             guzis=-1, guzas=-1, balance=-1, total=-1,
@@ -101,6 +102,15 @@ class Block(Signable):
         self.transactions = transactions if transactions else []
         self.engagements = engagements if engagements else []
         self.hash = None
+
+    def __str__(self):
+        return "v{} at {} by {}... [{},{},{},{}]".format(
+                self.version, self.close_date,
+                self.signer.hex()[:10],
+                self.guzis, self.guzas, self.balance, self.total)
+
+    def __repr__(self):
+        return self.__str__()
 
     def __eq__(self, other):
         return self.to_hash() == other.to_hash()
@@ -122,6 +132,22 @@ class Block(Signable):
             len(self.transactions),
             len(self.engagements)
         ])
+
+    def from_bytes(self, bytes_):
+        data = umsgpack.unpackb(bytes_)
+        if not data[0] == 1:
+            return
+        self.close_date = datetime.utcfromtimestamp(data[1]) if data[1] else None
+        self.previous_block_hash = data[2]
+        self.merkle_root = data[3]
+        self.signer = data[4]
+        self.guzis = data[5]
+        self.guzas = data[6]
+        self.balance = data[7]
+        self.total = data[8]
+        self.transactions = []
+        self.engagements = []
+
     
     def compute_merkle_root(self):
         self.merkle_root = self._tx_list_to_merkle_root(

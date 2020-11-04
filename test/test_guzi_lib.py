@@ -195,51 +195,77 @@ class TestBlockchainEq(unittest.TestCase):
         self.assertNotEqual(bc2, bc1)
 
 
-#class TestBlockchainSaveToFile(unittest.TestCase):
-#    @freeze_time("2011-12-13 12:34:56")
-#    def test_hex_format(self):
-#        # Arrange
-#        data1 = bytes.fromhex('01367d8f800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b0000000000000000000000000000000100000000')
-#        data2 = bytes.fromhex('0000000000000000000000000000000000000000000000000000000000000000031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d000000000000000000000000000000')
-#        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
-#        bc = Blockchain()
-#        bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-#
-#        outfile = BytesIO()
-#
-#        # Act
-#        bc.save_to_file(outfile)
-#        outfile.seek(0)
-#        content = outfile.read()
-#
-#        # Assert
-#        self.assertIn(data1, content)
-#        self.assertIn(data2, content)
+class TestBlockchainSaveToFile(unittest.TestCase):
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_all_blocks_should_be_in(self):
+        # Arrange
+        block0 = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        bc = Blockchain()
+        bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        bc.validate(REF_PRIV_KEY)
+        block1 = bytes.fromhex('9b01cb41d3b9d19c000000c440'+bc[0].hash.hex()+'c420dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8c421031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d010100000200')
+        outfile = BytesIO()
+
+        # Act
+        bc.save_to_file(outfile)
+        outfile.seek(0)
+        content = outfile.read()
+
+        # Assert
+        self.assertIn(block0, content)
+        self.assertIn(block1, content)
 
 
-#class TestBlockchainLoadFromFile(unittest.TestCase):
-#    @freeze_time("2011-12-13 12:34:56")
-#    def test_hex_format(self):
-#        # Arrange
-#        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
-#        bc_ref = Blockchain()
-#        bc_ref.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-#        outfile = BytesIO()
-#        bc_ref.save_to_file(outfile)
-#
-#        # Act
-#        bc = Blockchain()
-#        bc.load_from_file(outfile)
-#
-#        # Assert
-#        self.assertEqual(bc, bc_ref)
+class TestBlockchainLoadFromFile(unittest.TestCase):
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_hex_format(self):
+        # Arrange
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        bc_ref = Blockchain()
+        bc_ref.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        outfile = BytesIO()
+        bc_ref.save_to_file(outfile)
+        outfile.seek(0)
+
+        # Act
+        bc = Blockchain()
+        bc.load_from_file(outfile)
+
+        # Assert
+        self.assertEqual(bc, bc_ref)
+
+
+class TestBlockFromBytes(unittest.TestCase):
+
+    def test_birth_block(self):
+        # Arrange
+        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
+        block = Block()
+
+        # Act
+        block.from_bytes(data)
+
+        # Assert
+        self.assertEqual(block.close_date, datetime(1998, 12, 21,0,0,0,0))
+        self.assertEqual(block.previous_block_hash, EMPTY_HASH)
+        self.assertEqual(block.merkle_root, EMPTY_HASH)
+        self.assertEqual(block.signer, NEW_USER_PUB_KEY)
+        self.assertEqual(block.guzis, 0)
+        self.assertEqual(block.guzas, 0)
+        self.assertEqual(block.balance, 0)
+        self.assertEqual(block.total, 0)
+        self.assertEqual(len(block.transactions), 0)
+        self.assertEqual(len(block.engagements), 0)
 
 
 class TestBlock(unittest.TestCase):
 
     def test___bytes__(self):
         """
-        Type: 01
+        Type: 1
         Date (1998/12/21): 914198400.0
         Previous_block_hash: 0
         Merkle_root: 0
