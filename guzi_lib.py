@@ -9,6 +9,11 @@ from enum import Enum
 
 EMPTY_HASH = 0
 ENDIAN = 'big'
+VERSION = 1
+
+
+def guzi_hash(data):
+    return hashlib.sha256(data).digest()
 
 
 class TxType(Enum):
@@ -31,14 +36,11 @@ class Blockchain(list):
     def start(self, birthdate, new_pubkey, new_privkey, ref_pubkey):
         self.append(BirthBlock(birthdate, new_pubkey, new_privkey))
         init_block = Block(
-                previous_block=self[0],
+                previous_block_signature=self[0].signature,
                 signer=ref_pubkey,
-                guzis=0,
-                guzas=0,
-                balance=0,
-                total=0)
-        init_block.merkle_root =  EMPTY_HASH
-        init_block.hash =  EMPTY_HASH
+                merkle_root=EMPTY_HASH,
+                signature=EMPTY_HASH,
+                guzis=0, guzas=0, balance=0, total=0)
         self.append(init_block)
 
     def validate(self, ref_privkey):
@@ -48,7 +50,7 @@ class Blockchain(list):
         new_user_pub_key = birth_block.signer
         init_block.add_transaction(GuziCreationTransaction(new_user_pub_key, birth_block))
         init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key, birth_block))
-        init_block.compute_transactions()
+        init_block.compute_transactions(birth_block)
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
 
@@ -56,22 +58,25 @@ class Blockchain(list):
         """
         Save the content of the Blockchain to the given file
         """
-        umsgpack.pack([bytes(b) for b in self], outfile)
+        umsgpack.pack([b.pack() for b in self], outfile)
 
     def load_from_file(self, infile):
         hashed_blocks = umsgpack.unpack(infile)
         for b in hashed_blocks:
-            block = Block()
-            block.from_bytes(b)
+            block_as_list = umsgpack.unpackb(b)
+            block = Block(*block_as_list)
             self.append(block)
 
 
-class Signable:
-    def __bytes__(self):
+class Packable:
+
+    def pack(self):
         raise NotImplemented
 
+
+class Signable(Packable):
     def to_hash(self):
-        return hashlib.sha256(bytes(self)).digest()
+        return guzi_hash(self.pack())
 
     def sign(self, privkey):
         """
@@ -79,29 +84,28 @@ class Signable:
         return bytes
         """
         sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
-        self.hash = sk.sign(bytes(self))
-        return self.hash
+        self.signature = sk.sign(self.pack())
+        return self.signature
 
 
 class Block(Signable):
 
     def __init__(self,
-            close_date=None, previous_block=None, signer=None,
-            guzis=-1, guzas=-1, balance=-1, total=-1,
-            transactions=None, engagements=None):
-        self.version = 0x01
-        self.close_date = close_date
-        self.previous_block = previous_block if previous_block else None
-        self.previous_block_hash = previous_block.hash if previous_block else None
-        self.merkle_root = None
+            version=1, close_date=None, previous_block_signature=None, merkle_root=None,
+            signer=None, guzis=-1, guzas=-1, balance=-1, total=-1,
+            b_transactions=None, b_engagements=None, signature=None):
+        self.version = version
+        self.close_date = datetime.utcfromtimestamp(close_date) if close_date else None
+        self.previous_block_signature = previous_block_signature
+        self.merkle_root = merkle_root
         self.signer = signer
-        self.guzis = previous_block.guzis if previous_block else guzis
-        self.guzas = previous_block.guzas if previous_block else guzas
-        self.balance = previous_block.balance if previous_block else balance
-        self.total = previous_block.total if previous_block else total
-        self.transactions = transactions if transactions else []
-        self.engagements = engagements if engagements else []
-        self.hash = None
+        self.guzis = guzis
+        self.guzas = guzas
+        self.balance = balance
+        self.total = total
+        self.transactions = [Transaction(b_tx) for b_tx in umsgpack.unpackb(b_transactions)] if b_transactions else []
+        self.engagements = []
+        self.signature = signature
 
     def __str__(self):
         return "v{} at {} by {}... [{},{},{},{}]".format(
@@ -113,42 +117,31 @@ class Block(Signable):
         return self.__str__()
 
     def __eq__(self, other):
-        return self.to_hash() == other.to_hash()
+        return self.pack() == other.pack()
 
     def add_transaction(self, tx):
         self.transactions.append(tx)
 
-    def __bytes__(self):
+    def add_transactions(self, tx):
+        for t in tx:
+            self.add_transaction(t)
+
+    def pack(self):
         return umsgpack.packb([
-            1, # Type
+            self.version, # Version
             self.close_date.timestamp() if self.close_date else 0,
-            self.previous_block_hash,
+            self.previous_block_signature,
             self.merkle_root,
             self.signer,
             self.guzis, 
             self.guzas,
             self.balance,
             self.total,
-            len(self.transactions),
-            len(self.engagements)
+            [t.pack() for t in self.transactions],
+            [e.pack() for e in self.engagements],
+            self.signature
         ])
 
-    def from_bytes(self, bytes_):
-        data = umsgpack.unpackb(bytes_)
-        if not data[0] == 1:
-            return
-        self.close_date = datetime.utcfromtimestamp(data[1]) if data[1] else None
-        self.previous_block_hash = data[2]
-        self.merkle_root = data[3]
-        self.signer = data[4]
-        self.guzis = data[5]
-        self.guzas = data[6]
-        self.balance = data[7]
-        self.total = data[8]
-        self.transactions = []
-        self.engagements = []
-
-    
     def compute_merkle_root(self):
         self.merkle_root = self._tx_list_to_merkle_root(
             [t.to_hash() for t in self.transactions])
@@ -176,12 +169,12 @@ class Block(Signable):
     def _hash_pair(self, hash0, hash1):
         return hashlib.sha256(hash0+hash1).digest()
 
-    def compute_transactions(self):
-        self.guzis = self.previous_block.guzis
+    def compute_transactions(self, previous_block = None):
+        self.guzis = previous_block.guzis if previous_block else 0
         for tx in self.transactions:
             if tx.tx_type == TxType.GUZI_CREATE.value:
                 self.guzis += tx.amount
-        self.guzas = self.previous_block.guzas
+        self.guzas = previous_block.guzas if previous_block else 0
         for tx in self.transactions:
             if tx.tx_type == TxType.GUZA_CREATE.value:
                 self.guzas += tx.amount
@@ -194,15 +187,15 @@ class BirthBlock(Block):
                 signer=new_user_pub_key,
                 guzis=0, guzas=0,
                 balance=0, total=0)
-        self.previous_block_hash = EMPTY_HASH
+        self.previous_block_signature = EMPTY_HASH
         self.merkle_root = EMPTY_HASH
         self.sign(new_user_priv_key)
 
 
 class Transaction(Signable):
-    def __init__(self, tx_type, source, amount, tx_date=None, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail=""):
+    def __init__(self, version, tx_type, source, amount, tx_date=None, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail="", signature=None):
 
-        self.version = 1
+        self.version = version
         self.tx_type = tx_type
         self.date = tx_date
         self.source = source
@@ -214,7 +207,24 @@ class Transaction(Signable):
         self.start_date = start_index
         self.end_date = end_date
         self.detail = detail
-        self.hash = ""
+        self.signature = signature
+
+    def pack(self):
+        return umsgpack.packb([
+            self.version,
+            self.tx_type,
+            self.date.timestamp(),
+            self.source,
+            self.amount,
+            self.target_company,
+            self.target_user,
+            self.start_index,
+            self.end_index,
+            self.start_date,
+            self.end_date,
+            self.detail,
+            self.signature
+        ])
 
 
 class GuziCreationTransaction(Transaction):
@@ -224,27 +234,11 @@ class GuziCreationTransaction(Transaction):
     by himself, to himself. It only depends of current block total accumulated
     value.
 
-    version : 01
-    tx_type : 00
-    date : creation date
-    source : public key of owner
-    amount : number of created guzis, depend of total accumulated of current
-        block. amount = (total_accumulated)^(1/3) + 1
-    hash of the transaction
-
     """
     def __init__(self, owner, last_block):
         amount = 1 # TODO
-        super().__init__(TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
+        super().__init__(VERSION, TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
 
-    def __bytes__(self):
-        return umsgpack.packb([
-            self.version,
-            self.tx_type,
-            self.date.timestamp(),
-            self.source,
-            self.amount
-        ])
 
 
 class GuzaCreationTransaction(Transaction):
@@ -254,25 +248,8 @@ class GuzaCreationTransaction(Transaction):
     by himself, to himself. It only depends of current block total accumulated
     value and birthday date, which must imply age > 18 years old.
 
-    version : 01
-    tx_type : 01
-    date : creation date
-    source : public key of owner
-    amount : number of created guzis, depend of total accumulated of current
-        block. amount = (total_accumulated)^(1/3) + 1
-    hash of the transaction
-
     """
     # TODO : check age > 18
     def __init__(self, owner, last_block):
         amount = 1 # TODO
-        super().__init__(TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
-
-    def __bytes__(self):
-        return umsgpack.packb([
-            self.version,
-            self.tx_type,
-            self.date.timestamp(),
-            self.source,
-            self.amount
-        ])
+        super().__init__(VERSION, TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))

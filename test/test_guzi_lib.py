@@ -61,19 +61,19 @@ class TestBlockchainStart(unittest.TestCase):
 
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
-        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
 
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         
         # Act
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         birthday_block, init_block = bc
+        data = birthday_block.pack()
 
         # Assert
         self.assertEqual(birthday_block.version, 0x01)
-        self.assertEqual(birthday_block.close_date, birthdate)
-        self.assertEqual(birthday_block.previous_block_hash, EMPTY_HASH)
+        self.assertEqual(birthday_block.close_date, datetime(1998, 12, 21,0,0,0,0))
+        self.assertEqual(birthday_block.previous_block_signature, EMPTY_HASH)
         self.assertEqual(birthday_block.merkle_root, EMPTY_HASH)
         self.assertEqual(birthday_block.signer, NEW_USER_PUB_KEY)
         self.assertEqual(birthday_block.guzis, 0)
@@ -82,11 +82,11 @@ class TestBlockchainStart(unittest.TestCase):
         self.assertEqual(birthday_block.total, 0)
         self.assertEqual(birthday_block.transactions, [])
         self.assertEqual(birthday_block.engagements, [])
-        self.assertTrue(vk.verify(birthday_block.hash, data))
+        self.assertTrue(vk.verify(birthday_block.signature, data))
 
         self.assertEqual(init_block.version, 0x01)
         self.assertEqual(init_block.close_date, None)
-        self.assertEqual(init_block.previous_block_hash, birthday_block.hash)
+        self.assertEqual(init_block.previous_block_signature, birthday_block.signature)
         self.assertEqual(init_block.merkle_root, EMPTY_HASH)
         self.assertEqual(init_block.signer, REF_PUB_KEY)
         self.assertEqual(init_block.guzis, 0)
@@ -95,7 +95,7 @@ class TestBlockchainStart(unittest.TestCase):
         self.assertEqual(init_block.total, 0)
         self.assertEqual(init_block.transactions, [])
         self.assertEqual(init_block.engagements, [])
-        self.assertEqual(init_block.hash, EMPTY_HASH)
+        self.assertEqual(init_block.signature, EMPTY_HASH)
 
 
 class TestBlockchainValidate(unittest.TestCase):
@@ -133,15 +133,15 @@ class TestBlockchainValidate(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
-        expected_merkle_root = bytes.fromhex("dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8")
 
-        birthdate = datetime(1998, 12, 21)
+        birthdate = datetime(1998, 12, 21).timestamp()
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        data = bytes.fromhex('9b01cb41d3b9d19c000000c440'+bc[0].hash.hex()+'c420dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8c421031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d010100000200')
         # Act
         bc.validate(REF_PRIV_KEY)
         init_block = bc[1]
+        expected_merkle_root = guzi_hash(init_block.transactions[0].to_hash()+init_block.transactions[1].to_hash())
+        expected_data = init_block.pack()
         
         # Assert
         self.assertEqual(init_block.version, 1)
@@ -152,14 +152,14 @@ class TestBlockchainValidate(unittest.TestCase):
         self.assertEqual(init_block.balance, 0)
         self.assertEqual(init_block.total, 0)
         self.assertEqual(len(init_block.transactions), 2)
-        self.assertTrue(vk.verify(init_block.hash, data))
+        self.assertTrue(vk.verify(init_block.signature, expected_data))
         
 
 class TestBlockchainEq(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
     def test_two_identic_basic_bc_are_equals(self):
         # Arrange
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc1 = Blockchain()
         bc1.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
 
@@ -169,10 +169,10 @@ class TestBlockchainEq(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
     def test_different_birthdate(self):
         # Arrange
-        birthdate1 = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        birthdate1 = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc1 = Blockchain()
         bc1.start(birthdate1, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        birthdate2 = datetime(1999, 11, 23,0,0,0,0, tzinfo=pytz.utc)
+        birthdate2 = datetime(1999, 11, 23,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc2 = Blockchain()
         bc2.start(birthdate2, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
 
@@ -183,10 +183,10 @@ class TestBlockchainEq(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
     def test_different_keys(self):
         # Arrange
-        birthdate1 = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        birthdate1 = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc1 = Blockchain()
         bc1.start(birthdate1, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        birthdate2 = datetime(1999, 11, 23,0,0,0,0, tzinfo=pytz.utc)
+        birthdate2 = datetime(1999, 11, 23,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc2 = Blockchain()
         bc2.start(birthdate2, REF_PUB_KEY, REF_PRIV_KEY, NEW_USER_PUB_KEY)
 
@@ -200,12 +200,12 @@ class TestBlockchainSaveToFile(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
     def test_all_blocks_should_be_in(self):
         # Arrange
-        block0 = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         bc.validate(REF_PRIV_KEY)
-        block1 = bytes.fromhex('9b01cb41d3b9d19c000000c440'+bc[0].hash.hex()+'c420dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8c421031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d010100000200')
+        block0 = bc[0].pack()
+        block1 = bc[1].pack()
         outfile = BytesIO()
 
         # Act
@@ -223,7 +223,7 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
     def test_hex_format(self):
         # Arrange
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc)
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         bc_ref = Blockchain()
         bc_ref.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         outfile = BytesIO()
@@ -238,32 +238,9 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
         self.assertEqual(bc, bc_ref)
 
 
-class TestBlockFromBytes(unittest.TestCase):
+class TestBlockPack(unittest.TestCase):
 
-    def test_birth_block(self):
-        # Arrange
-        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
-        block = Block()
-
-        # Act
-        block.from_bytes(data)
-
-        # Assert
-        self.assertEqual(block.close_date, datetime(1998, 12, 21,0,0,0,0))
-        self.assertEqual(block.previous_block_hash, EMPTY_HASH)
-        self.assertEqual(block.merkle_root, EMPTY_HASH)
-        self.assertEqual(block.signer, NEW_USER_PUB_KEY)
-        self.assertEqual(block.guzis, 0)
-        self.assertEqual(block.guzas, 0)
-        self.assertEqual(block.balance, 0)
-        self.assertEqual(block.total, 0)
-        self.assertEqual(len(block.transactions), 0)
-        self.assertEqual(len(block.engagements), 0)
-
-
-class TestBlock(unittest.TestCase):
-
-    def test___bytes__(self):
+    def test_pack(self):
         """
         Type: 1
         Date (1998/12/21): 914198400.0
@@ -278,46 +255,49 @@ class TestBlock(unittest.TestCase):
         engagements count: 0 
         """
         # Arrange
-        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
+        data = bytes.fromhex('9b01cb41cb3ec0b80000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000009090')
         block = Block(
-                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
+                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
+                previous_block_signature=EMPTY_HASH,
+                merkle_root=EMPTY_HASH,
                 signer=NEW_USER_PUB_KEY,
                 guzis=0, guzas=0, balance=0, total=0)
-        block.previous_block_hash = EMPTY_HASH
-        block.merkle_root = EMPTY_HASH
 
         # Act
-        result = bytes(block)
+        result = block.pack()
 
         # Assert
         self.assertEqual(result, data)
 
+
+class TestBlock(unittest.TestCase):
+
     def test_to_hash(self):
         # Arrange
         block = Block(
-                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
+                datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
+                previous_block_signature=EMPTY_HASH,
+                merkle_root=EMPTY_HASH,
                 signer=NEW_USER_PUB_KEY,
                 guzis=0, guzas=0, balance=0, total=0)
-        block.previous_block_hash = EMPTY_HASH
-        block.merkle_root = EMPTY_HASH
 
         # Act
         result = block.to_hash()
 
         # Assert
-        self.assertEqual(result, bytes.fromhex('e7cd2f787d81df4ee7df7a31631f915f1e64fe51e5cdffa68a370e939b6a1681'))
+        self.assertEqual(result, bytes.fromhex('a12ecf46006b5b720af5731364b835ad2261d3acdd9ca44763562d8e5f036a51'))
 
     def test_sign(self):
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
-        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
 
         block = Block(
-                close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc),
+                datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
+                previous_block_signature=EMPTY_HASH,
+                merkle_root=EMPTY_HASH,
                 signer=NEW_USER_PUB_KEY,
                 guzis=0, guzas=0, balance=0, total=0)
-        block.previous_block_hash = EMPTY_HASH
-        block.merkle_root = EMPTY_HASH
+        data = block.pack()
 
         # Act
         signature = block.sign(REF_PRIV_KEY)
@@ -357,11 +337,11 @@ class TestBlock(unittest.TestCase):
         hash(hash0 + hash0)
         """
         # Arrange
-        block = Block(transactions=[
-            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
-        ])
+        tx = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
+        block = Block()
+        block.add_transaction(tx)
 
-        expected_merkle_root = bytes.fromhex("69bb88f1ca872e50f65c167bccb3049a09c98d6a2c002725328fbfc4652cb974")
+        expected_merkle_root = guzi_hash(tx.to_hash()+tx.to_hash())
 
         # Act
         result = block.compute_merkle_root()
@@ -376,12 +356,12 @@ class TestBlock(unittest.TestCase):
         hash(hash0 + hash1)
         """
         # Arrange
-        block = Block(transactions=[
-            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
-            GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
-        ])
+        tx0 = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
+        tx1 = GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
+        block = Block()
+        block.add_transactions([tx0, tx1])
 
-        expected_merkle_root = bytes.fromhex("dde4a7d066bcbb3d6a25bd6f1517b535f470503117cba613c2b05c112a8f0aa8")
+        expected_merkle_root = guzi_hash(tx0.to_hash()+tx1.to_hash())
 
         # Act
         result = block.compute_merkle_root()
@@ -396,13 +376,15 @@ class TestBlock(unittest.TestCase):
         hash(hash(hash0 + hash1) + hash(hash3 + hash3))
         """
         # Arrange
-        block = Block(transactions=[
-            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
-            GuzaCreationTransaction(NEW_USER_PUB_KEY, Block()),
-            GuzaCreationTransaction(REF_PUB_KEY, Block())
-        ])
+        tx0 = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
+        tx1 = GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
+        tx2 = GuzaCreationTransaction(REF_PUB_KEY, Block())
+        block = Block()
+        block.add_transactions([tx0, tx1, tx2])
 
-        expected_merkle_root = bytes.fromhex("00ceedb26795490a27dfe9c2d605c52af32e1681ac161e55f9430972b9ff3147")
+        hash01 = guzi_hash(tx0.to_hash()+tx1.to_hash())
+        hash22 = guzi_hash(tx2.to_hash()+tx2.to_hash())
+        expected_merkle_root = guzi_hash(hash01+hash22)
 
         # Act
         result = block.compute_merkle_root()
@@ -412,21 +394,19 @@ class TestBlock(unittest.TestCase):
 
     def test_compute_transactions_with_1_guzis(self):
         # Arrange
-        block = Block(previous_block=Block(guzis=0), transactions=[
-            GuziCreationTransaction(NEW_USER_PUB_KEY, Block()),
-        ])
+        block = Block(guzis=0)
+        block.add_transaction(GuziCreationTransaction(NEW_USER_PUB_KEY, Block()))
 
         # Act
-        block.compute_transactions()
+        block.compute_transactions(None)
 
         # Assert
         self.assertEqual(block.guzis, 1)
 
     def test_compute_transactions_with_1_guzas(self):
         # Arrange
-        block = Block(previous_block=Block(guzas=0), transactions=[
-            GuzaCreationTransaction(NEW_USER_PUB_KEY, Block()),
-        ])
+        block = Block(guzas=0)
+        block.add_transaction(GuzaCreationTransaction(NEW_USER_PUB_KEY, Block()))
 
         # Act
         block.compute_transactions()
@@ -451,10 +431,10 @@ class TestGuziCreationTransaction(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
-        data = bytes.fromhex('950100cb41d3b9d19c000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b01')
 
         # Act
         tx = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
+        data = tx.pack()
         tx.sign(NEW_USER_PRIV_KEY)
 
         # Assert
@@ -462,7 +442,7 @@ class TestGuziCreationTransaction(unittest.TestCase):
         self.assertEqual(tx.source, NEW_USER_PUB_KEY)
         self.assertEqual(tx.date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
         self.assertEqual(tx.amount, 1)
-        self.assertTrue(vk.verify(tx.hash, data))
+        self.assertTrue(vk.verify(tx.signature, data))
 
 
 class TestGuzaCreationTransaction(unittest.TestCase):
@@ -481,10 +461,10 @@ class TestGuzaCreationTransaction(unittest.TestCase):
         """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
-        data = bytes.fromhex('950101cb41d3b9d19c000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b01')
 
         # Act
         tx = GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
+        data = tx.pack()
         tx.sign(NEW_USER_PRIV_KEY)
 
         # Assert
@@ -492,4 +472,4 @@ class TestGuzaCreationTransaction(unittest.TestCase):
         self.assertEqual(tx.source, NEW_USER_PUB_KEY)
         self.assertEqual(tx.date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
         self.assertEqual(tx.amount, 1)
-        self.assertTrue(vk.verify(tx.hash, data))
+        self.assertTrue(vk.verify(tx.signature, data))
