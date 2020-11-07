@@ -73,10 +73,13 @@ class Packable:
     def pack(self):
         raise NotImplemented
 
+    def pack_for_hash(self):
+        raise NotImplemented
+
 
 class Signable(Packable):
     def to_hash(self):
-        return guzi_hash(self.pack())
+        return guzi_hash(self.pack_for_hash())
 
     def sign(self, privkey):
         """
@@ -84,7 +87,7 @@ class Signable(Packable):
         return bytes
         """
         sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
-        self.signature = sk.sign(self.pack())
+        self.signature = sk.sign(self.pack_for_hash())
         return self.signature
 
 
@@ -125,6 +128,21 @@ class Block(Signable):
     def add_transactions(self, tx):
         for t in tx:
             self.add_transaction(t)
+
+    def pack_for_hash(self):
+        return umsgpack.packb([
+            self.version, # Version
+            self.close_date.timestamp() if self.close_date else 0,
+            self.previous_block_signature,
+            self.merkle_root,
+            self.signer,
+            self.guzis, 
+            self.guzas,
+            self.balance,
+            self.total,
+            [t.pack() for t in self.transactions],
+            [e.pack() for e in self.engagements]
+        ])
 
     def pack(self):
         return umsgpack.packb([
@@ -208,6 +226,22 @@ class Transaction(Signable):
         self.end_date = end_date
         self.detail = detail
         self.signature = signature
+
+    def pack_for_hash(self):
+        return umsgpack.packb([
+            self.version,
+            self.tx_type,
+            self.date.timestamp(),
+            self.source,
+            self.amount,
+            self.target_company,
+            self.target_user,
+            self.start_index,
+            self.end_index,
+            self.start_date,
+            self.end_date,
+            self.detail,
+        ])
 
     def pack(self):
         return umsgpack.packb([

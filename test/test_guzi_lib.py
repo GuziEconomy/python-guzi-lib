@@ -68,7 +68,7 @@ class TestBlockchainStart(unittest.TestCase):
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         birthday_block, init_block = bc
-        data = birthday_block.pack()
+        data = birthday_block.pack_for_hash()
 
         # Assert
         self.assertEqual(birthday_block.version, 0x01)
@@ -141,7 +141,7 @@ class TestBlockchainValidate(unittest.TestCase):
         bc.validate(REF_PRIV_KEY)
         init_block = bc[1]
         expected_merkle_root = guzi_hash(init_block.transactions[0].to_hash()+init_block.transactions[1].to_hash())
-        expected_data = init_block.pack()
+        expected_data = init_block.pack_for_hash()
         
         # Assert
         self.assertEqual(init_block.version, 1)
@@ -204,14 +204,14 @@ class TestBlockchainSaveToFile(unittest.TestCase):
         bc = Blockchain()
         bc.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         bc.validate(REF_PRIV_KEY)
-        block0 = bc[0].pack()
-        block1 = bc[1].pack()
+        block0 = bc[0].pack().hex()
+        block1 = bc[1].pack().hex()
         outfile = BytesIO()
 
         # Act
         bc.save_to_file(outfile)
         outfile.seek(0)
-        content = outfile.read()
+        content = outfile.read().hex()
 
         # Assert
         self.assertIn(block0, content)
@@ -264,7 +264,7 @@ class TestBlockPack(unittest.TestCase):
                 guzis=0, guzas=0, balance=0, total=0)
 
         # Act
-        result = block.pack()
+        result = block.pack_for_hash()
 
         # Assert
         self.assertEqual(result, data)
@@ -285,7 +285,7 @@ class TestBlock(unittest.TestCase):
         result = block.to_hash()
 
         # Assert
-        self.assertEqual(result, bytes.fromhex('a12ecf46006b5b720af5731364b835ad2261d3acdd9ca44763562d8e5f036a51'))
+        self.assertEqual(result, bytes.fromhex('d74d92034de3301402e69b937929d34c8cf97d0578f9f7880a816acb27502f4d'))
 
     def test_sign(self):
         # Arrange
@@ -297,7 +297,7 @@ class TestBlock(unittest.TestCase):
                 merkle_root=EMPTY_HASH,
                 signer=NEW_USER_PUB_KEY,
                 guzis=0, guzas=0, balance=0, total=0)
-        data = block.pack()
+        data = block.pack_for_hash()
 
         # Act
         signature = block.sign(REF_PRIV_KEY)
@@ -434,7 +434,7 @@ class TestGuziCreationTransaction(unittest.TestCase):
 
         # Act
         tx = GuziCreationTransaction(NEW_USER_PUB_KEY, Block())
-        data = tx.pack()
+        data = tx.pack_for_hash()
         tx.sign(NEW_USER_PRIV_KEY)
 
         # Assert
@@ -464,11 +464,10 @@ class TestGuzaCreationTransaction(unittest.TestCase):
 
         # Act
         tx = GuzaCreationTransaction(NEW_USER_PUB_KEY, Block())
-        data = tx.pack()
+        data = tx.pack_for_hash()
         tx.sign(NEW_USER_PRIV_KEY)
 
         # Assert
-        self.assertEqual(tx.tx_type, 0x01)
         self.assertEqual(tx.source, NEW_USER_PUB_KEY)
         self.assertEqual(tx.date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
         self.assertEqual(tx.amount, 1)
