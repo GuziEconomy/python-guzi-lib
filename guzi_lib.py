@@ -69,7 +69,6 @@ class Blockchain(list):
 
 
 class Packable:
-
     def pack(self):
         raise NotImplemented
 
@@ -98,7 +97,7 @@ class Block(Signable):
             signer=None, guzis=-1, guzas=-1, balance=-1, total=-1,
             b_transactions=None, b_engagements=None, signature=None):
         self.version = version
-        self.close_date = datetime.utcfromtimestamp(close_date) if close_date else None
+        self.close_date = datetime.utcfromtimestamp(close_date).replace(tzinfo=pytz.utc) if close_date else None
         self.previous_block_signature = previous_block_signature
         self.merkle_root = merkle_root
         self.signer = signer
@@ -106,7 +105,7 @@ class Block(Signable):
         self.guzas = guzas
         self.balance = balance
         self.total = total
-        self.transactions = [Transaction(b_tx) for b_tx in umsgpack.unpackb(b_transactions)] if b_transactions else []
+        self.transactions = [Transaction(*umsgpack.unpackb(b_tx)) for b_tx in b_transactions] if b_transactions else []
         self.engagements = []
         self.signature = signature
 
@@ -140,8 +139,8 @@ class Block(Signable):
             self.guzas,
             self.balance,
             self.total,
-            [t.pack() for t in self.transactions],
-            [e.pack() for e in self.engagements]
+            len(self.transactions),
+            len(self.engagements)
         ])
 
     def pack(self):
@@ -211,11 +210,13 @@ class BirthBlock(Block):
 
 
 class Transaction(Signable):
-    def __init__(self, version, tx_type, source, amount, tx_date=None, target_company="", target_user="", start_index=-1, end_index=-1, start_date=-1, end_date=-1, detail="", signature=None):
 
+    def __init__(self, version, tx_type, source, amount, tx_date=None,
+            target_company="", target_user="", start_index=-1, end_index=-1,
+            start_date=-1, end_date=-1, detail="", signature=None):
         self.version = version
         self.tx_type = tx_type
-        self.date = tx_date
+        self.date = datetime.utcfromtimestamp(tx_date).replace(tzinfo=pytz.utc) if tx_date else tx_date
         self.source = source
         self.amount = amount
         self.target_company = target_company
@@ -226,6 +227,27 @@ class Transaction(Signable):
         self.end_date = end_date
         self.detail = detail
         self.signature = signature
+
+    def __str__(self):
+        return "{}, {}, {}, {}".format(self.tx_type, self.date, self.source, self.amount)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __eq__(self, other):
+        return (self.version == other.version and
+        self.tx_type == other.tx_type and
+        self.date == other.date and
+        self.source == other.source and
+        self.amount == other.amount and
+        self.target_company == other.target_company and
+        self.target_user == other.target_user and
+        self.start_index == other.start_index and
+        self.end_index == other.end_index and
+        self.start_date == other.start_date and
+        self.end_date == other.end_date and
+        self.detail == other.detail and
+        self.signature == other.signature)
 
     def pack_for_hash(self):
         return umsgpack.packb([
@@ -247,9 +269,9 @@ class Transaction(Signable):
         return umsgpack.packb([
             self.version,
             self.tx_type,
-            self.date.timestamp(),
             self.source,
             self.amount,
+            self.date.timestamp(),
             self.target_company,
             self.target_user,
             self.start_index,
@@ -271,8 +293,7 @@ class GuziCreationTransaction(Transaction):
     """
     def __init__(self, owner, last_block):
         amount = 1 # TODO
-        super().__init__(VERSION, TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
-
+        super().__init__(VERSION, TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc).timestamp())
 
 
 class GuzaCreationTransaction(Transaction):
@@ -286,4 +307,4 @@ class GuzaCreationTransaction(Transaction):
     # TODO : check age > 18
     def __init__(self, owner, last_block):
         amount = 1 # TODO
-        super().__init__(VERSION, TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc))
+        super().__init__(VERSION, TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc).timestamp())

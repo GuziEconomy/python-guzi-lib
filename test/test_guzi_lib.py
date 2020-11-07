@@ -72,7 +72,7 @@ class TestBlockchainStart(unittest.TestCase):
 
         # Assert
         self.assertEqual(birthday_block.version, 0x01)
-        self.assertEqual(birthday_block.close_date, datetime(1998, 12, 21,0,0,0,0))
+        self.assertEqual(birthday_block.close_date, datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc))
         self.assertEqual(birthday_block.previous_block_signature, EMPTY_HASH)
         self.assertEqual(birthday_block.merkle_root, EMPTY_HASH)
         self.assertEqual(birthday_block.signer, NEW_USER_PUB_KEY)
@@ -218,29 +218,58 @@ class TestBlockchainSaveToFile(unittest.TestCase):
         self.assertIn(block1, content)
 
 
+@freeze_time("2011-12-13 12:34:56")
 class TestBlockchainLoadFromFile(unittest.TestCase):
 
-    @freeze_time("2011-12-13 12:34:56")
+    def make_blockchain(self):
+        blockchain_ref = Blockchain()
+        blockchain_ref.start(
+                birthdate=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
+                new_pubkey=NEW_USER_PUB_KEY,
+                new_privkey=NEW_USER_PRIV_KEY,
+                ref_pubkey=REF_PUB_KEY)
+        return blockchain_ref
+
     def test_hex_format(self):
+        """
+        """
         # Arrange
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        bc_ref = Blockchain()
-        bc_ref.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain_ref = self.make_blockchain()
         outfile = BytesIO()
-        bc_ref.save_to_file(outfile)
+        blockchain_ref.save_to_file(outfile)
         outfile.seek(0)
 
         # Act
-        bc = Blockchain()
-        bc.load_from_file(outfile)
+        blockchain = Blockchain()
+        blockchain.load_from_file(outfile)
 
         # Assert
-        self.assertEqual(bc, bc_ref)
+        self.assertEqual(blockchain, blockchain_ref)
+
+    def test_transactions_are_the_same(self):
+        """
+        """
+        # Arrange
+        blockchain_ref = self.make_blockchain()
+        blockchain_ref.validate(REF_PRIV_KEY)
+        ref_transactions = blockchain_ref[1].transactions
+        outfile = BytesIO()
+        blockchain_ref.save_to_file(outfile)
+        outfile.seek(0)
+
+        # Act
+        blockchain = Blockchain()
+        blockchain.load_from_file(outfile)
+        transactions = blockchain[1].transactions
+
+        # Assert
+        self.assertEqual(len(transactions), 2)
+        self.assertEqual(transactions[0], ref_transactions[0])
 
 
 class TestBlockPack(unittest.TestCase):
 
-    def test_pack(self):
+    def test_pack_for_hash(self):
         """
         Type: 1
         Date (1998/12/21): 914198400.0
@@ -255,7 +284,7 @@ class TestBlockPack(unittest.TestCase):
         engagements count: 0 
         """
         # Arrange
-        data = bytes.fromhex('9b01cb41cb3ec0b80000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000009090')
+        data = bytes.fromhex('9b01cb41cb3ec7c00000000000c42102071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b000000000000')
         block = Block(
                 close_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
                 previous_block_signature=EMPTY_HASH,
@@ -273,6 +302,8 @@ class TestBlockPack(unittest.TestCase):
 class TestBlock(unittest.TestCase):
 
     def test_to_hash(self):
+        """
+        """
         # Arrange
         block = Block(
                 datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
@@ -285,9 +316,11 @@ class TestBlock(unittest.TestCase):
         result = block.to_hash()
 
         # Assert
-        self.assertEqual(result, bytes.fromhex('d74d92034de3301402e69b937929d34c8cf97d0578f9f7880a816acb27502f4d'))
+        self.assertEqual(result, bytes.fromhex('f8a98021264759eec491272b2d4939dcbc5f69ff3fba441ca6e05e1bc8daf4b5'))
 
     def test_sign(self):
+        """
+        """
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
 
@@ -306,6 +339,8 @@ class TestBlock(unittest.TestCase):
         self.assertTrue(vk.verify(signature, data))
 
     def test_add_transaction(self):
+        """
+        """
         # Arrange
         block = Block()
         tx = GuziCreationTransaction(EMPTY_HASH, Block())
