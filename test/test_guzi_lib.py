@@ -265,6 +265,7 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
         # Assert
         self.assertEqual(len(transactions), 2)
         self.assertEqual(transactions[0], ref_transactions[0])
+        self.assertEqual(transactions[1], ref_transactions[1])
 
 
 class TestBlockPack(unittest.TestCase):
