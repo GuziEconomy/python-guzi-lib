@@ -331,6 +331,52 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
         self.assertEqual(transactions[1], ref_transactions[1])
 
 
+@freeze_time("2011-12-13 12:34:56")
+class TestBlockchainLoadFromBytes(unittest.TestCase):
+
+    def make_blockchain(self):
+        blockchain_ref = Blockchain()
+        blockchain_ref.start(
+                birthdate=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
+                new_pubkey=NEW_USER_PUB_KEY,
+                new_privkey=NEW_USER_PRIV_KEY,
+                ref_pubkey=REF_PUB_KEY)
+        return blockchain_ref
+
+    def test_hex_format(self):
+        """ """
+        # Arrange
+        blockchain_ref = self.make_blockchain()
+        b = blockchain_ref.pack()
+
+        # Act
+        blockchain = Blockchain()
+        blockchain.load_from_bytes(b)
+
+        # Assert
+        self.assertEqual(blockchain, blockchain_ref)
+
+    def test_transactions_are_the_same(self):
+        """ """
+        # Arrange
+        blockchain_ref = self.make_blockchain()
+        blockchain_ref.validate(REF_PRIV_KEY)
+        ref_transactions = blockchain_ref[1].transactions
+        outfile = BytesIO()
+        blockchain_ref.save_to_file(outfile)
+        outfile.seek(0)
+
+        # Act
+        blockchain = Blockchain()
+        blockchain.load_from_file(outfile)
+        transactions = blockchain[1].transactions
+
+        # Assert
+        self.assertEqual(len(transactions), 2)
+        self.assertEqual(transactions[0], ref_transactions[0])
+        self.assertEqual(transactions[1], ref_transactions[1])
+
+
 class TestBlockPack(unittest.TestCase):
 
     def test_pack_for_hash(self):

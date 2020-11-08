@@ -76,8 +76,18 @@ class Blockchain(list):
         """
         umsgpack.pack([b.pack() for b in self], outfile)
 
+    def pack(self):
+        return umsgpack.packb([b.pack() for b in self])
+
     def load_from_file(self, infile):
         hashed_blocks = umsgpack.unpack(infile)
+        self._from_hashed_blocks(hashed_blocks)
+
+    def load_from_bytes(self, b):
+        hashed_blocks = umsgpack.unpackb(b)
+        self._from_hashed_blocks(hashed_blocks)
+
+    def _from_hashed_blocks(self, hashed_blocks):
         for b in hashed_blocks:
             block_as_list = umsgpack.unpackb(b)
             block = Block(*block_as_list)
