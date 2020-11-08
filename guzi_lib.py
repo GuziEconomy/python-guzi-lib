@@ -97,11 +97,18 @@ class Blockchain(list):
         if len(self) > 0 and not self[-1].is_signed():
             raise UnsignedPreviousBlockError
         block = Block()
+        if len(self) > 0:
+            block.previous_block_signature = self[-1].signature
         super().append(block)
 
     def append_tx(self, transaction):
         assert(isinstance(transaction, Transaction))
         self[-1].add_transaction(transaction)
+
+    def _reduce(self, pubkey):
+        for index, block in reversed(list(enumerate(self))):
+            if block._containUser(pubkey):
+                return self[index:]
 
 
 class Packable:
@@ -150,7 +157,7 @@ class Block(Signable):
     def __str__(self):
         return "v{} at {} by {}... [{},{},{},{}]".format(
                 self.version, self.close_date,
-                self.signer.hex()[:10],
+                self.signer.hex()[:10] if self.signer else "unsigned",
                 self.guzis, self.guzas, self.balance, self.total)
 
     def __repr__(self):

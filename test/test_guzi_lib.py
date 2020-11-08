@@ -282,6 +282,64 @@ class TestBlockchainNewBlock(unittest.TestCase):
         with self.assertRaises(UnsignedPreviousBlockError):
             blockchain.new_block()
 
+    def test_should_set_previous_block_hash(self):
+         
+        # Arrange
+        blockchain = Blockchain()
+        blockchain.new_block()
+        blockchain[0].sign(REF_PRIV_KEY)
+
+        # Act
+        blockchain.new_block()
+
+        # Assert
+        self.assertEqual(blockchain[1].previous_block_signature, blockchain[0].signature)
+
+
+class TestBlockchainReduce(unittest.TestCase):
+
+    def test_should_return_total_blockchain_at_first_contact(self):
+        
+        # Arrange
+        blockchain = Blockchain()
+        blockchain.new_block()
+        tx0 = GuziCreationTransaction(KEY_POOL[0]["pub"])
+        tx1 = GuziCreationTransaction(KEY_POOL[1]["pub"])
+        tx2 = GuziCreationTransaction(KEY_POOL[2]["pub"])
+        tx3 = GuziCreationTransaction(KEY_POOL[3]["pub"])
+        tx4 = GuziCreationTransaction(KEY_POOL[4]["pub"])
+        blockchain[0].add_transactions([tx0, tx1, tx2])
+        blockchain[0].sign(REF_PRIV_KEY)
+        blockchain.new_block()
+        blockchain[1].add_transactions([tx3, tx4])
+
+        # Act
+        result = blockchain._reduce(KEY_POOL[5]["pub"])
+
+        # Assert
+        self.assertEqual(len(result), len(blockchain))
+
+    def test_should_return_total_blockchain_at_first_contact(self):
+        
+        # Arrange
+        blockchain = Blockchain()
+        blockchain.new_block()
+        tx0 = GuziCreationTransaction(KEY_POOL[0]["pub"])
+        tx1 = GuziCreationTransaction(KEY_POOL[1]["pub"])
+        tx2 = GuziCreationTransaction(KEY_POOL[2]["pub"])
+        tx3 = GuziCreationTransaction(KEY_POOL[3]["pub"])
+        tx4 = GuziCreationTransaction(KEY_POOL[4]["pub"])
+        blockchain[0].add_transactions([tx0, tx1, tx2])
+        blockchain[0].sign(REF_PRIV_KEY)
+        blockchain.new_block()
+        blockchain[1].add_transactions([tx3, tx4])
+
+        # Act
+        result = blockchain._reduce(KEY_POOL[3]["pub"])
+
+        # Assert
+        self.assertEqual(len(result), 1)
+
 
 @freeze_time("2011-12-13 12:34:56")
 class TestBlockchainLoadFromFile(unittest.TestCase):
