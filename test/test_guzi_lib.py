@@ -270,17 +270,17 @@ class TestBlockchainAddTransaction(unittest.TestCase):
         self.assertIn(transaction, blockchain[-1].transactions)
 
 
-class TestBlockchainAppend(unittest.TestCase):
+class TestBlockchainNewBlock(unittest.TestCase):
 
     def test_should_raise_exception_if_last_block_not_signed(self):
          
         # Arrange
         blockchain = Blockchain()
-        blockchain.append(Block())
+        blockchain.new_block()
 
         # Act
         with self.assertRaises(UnsignedPreviousBlockError):
-            blockchain.append(Block())
+            blockchain.new_block()
 
 
 @freeze_time("2011-12-13 12:34:56")

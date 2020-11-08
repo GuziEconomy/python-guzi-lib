@@ -93,10 +93,10 @@ class Blockchain(list):
             block = Block(*block_as_list)
             self.append(block)
 
-    def append(self, block):
-        assert(isinstance(block, Block))
+    def new_block(self):
         if len(self) > 0 and not self[-1].is_signed():
             raise UnsignedPreviousBlockError
+        block = Block()
         super().append(block)
 
     def append_tx(self, transaction):
