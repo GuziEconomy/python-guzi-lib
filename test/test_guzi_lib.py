@@ -1,6 +1,8 @@
 import unittest
 import pytz
 import ecdsa
+import os
+import random
 
 from io import BytesIO
 from freezegun import freeze_time
@@ -8,12 +10,51 @@ import datetime
 
 from guzi_lib import *
 
-NEW_USER_PUB_KEY = bytes.fromhex("02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b")
-NEW_USER_PRIV_KEY = bytes.fromhex("cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6")
-REF_PUB_KEY =  bytes.fromhex("031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d")
-REF_PRIV_KEY = bytes.fromhex("7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca")
-EMPTY_HASH = 0
-TEST_HASH = bytes.fromhex("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08") # Hash of "test"
+KEY_POOL = [
+    {'priv': bytes.fromhex('cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6'),
+    'pub': bytes.fromhex('02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b')},
+    {'priv': bytes.fromhex('7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca'),
+    'pub': bytes.fromhex('031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d')},
+    {'priv': bytes.fromhex('1f77f037236b5a6763b2a18de13855b3d4a893c06bd004ba0f739c8d2f281103'),
+    'pub': bytes.fromhex('032a2eefc84ff6fd6a15eb1e920254cd02725350c67080a00970f535a762417cbb')},
+    {'priv': bytes.fromhex('f7aa7d91e5b6f82302f82d6c20346cc442729e5ceae6bdb26ea4bd4367a07c4d'),
+    'pub': bytes.fromhex('034dffbff09cd2ca67fc9ea67ad4c23e29d9e7febd6c82e8a82ae5e52df4220f6f')},
+    {'priv': bytes.fromhex('4768e8b37d07ff15bf2149f1fcbf0788be1f00e6b8f365ecbb751b6260d711dc'),
+    'pub': bytes.fromhex('02e490be01204314c0918ce6c781b3e6a1ef76f337344a4605589a8185379cd9ac')},
+    {'priv': bytes.fromhex('2c81a0b8bf49a4dd5a0ddb8b34f63fee0fe1c4d7673ed6376a07ed7a33430d18'),
+    'pub': bytes.fromhex('03ef500f14cfdafc25b88c9d054844bd50cf37fd12a374d08e06d8e92fe751471c')},
+    {'priv': bytes.fromhex('15a9e23b4bce92ee78b556c53dce720a5f538cb94719280e6bfb8dfbde33d049'),
+    'pub': bytes.fromhex('036ca32ba58cebf40dee409ddab41263afd1d5a3a74ab4ea317d9cadf32b8a530c')},
+    {'priv': bytes.fromhex('99184560439a716ab85316e6884ea901f076ca678d4f38f295f9201a7bccaa7e'),
+    'pub': bytes.fromhex('02b141e661a3beb6c251502f1ed2c1d3d00a65f3a2aae6c557980df6f8e7fb89ba')},
+    {'priv': bytes.fromhex('8428ef9ae38b229f2d36379d08e5b35c2c0443000e1d052e987da3a85269bc2c'),
+    'pub': bytes.fromhex('0284dd75d374c23f8a783fc7bb4f1f5268b59ff3264c23cf54ac0baa4567fc7362')},
+    {'priv': bytes.fromhex('a08f8b3e23129287cf24a973da9e6ad5ce5558a7ba2ff1b913c197351966f5af'),
+    'pub': bytes.fromhex('03ce3f8e980235165f5fc690f7c08eac3d0c7ba09541122f182f6b8c81431583d5')},
+    {'priv': bytes.fromhex('53ddf4b6fbf29ffb44192e15f87daf83dbf92f4bf6e609ddff60e2aa7f6125ed'),
+    'pub': bytes.fromhex('036cb8ac481bcd55cc876889be9e262a45da5612433bb34c0c5826703140dc6580')},
+    {'priv': bytes.fromhex('b69dda00c4cc3721ee056096a7f51283d9793fb1f8326cf2d3c47d50ce860a5a'),
+    'pub': bytes.fromhex('02fb673d955d41debc1c09fc889730038adecc1bab653bf39ebbeda57cc03ff455')}
+]
+NEW_USER_PUB_KEY = KEY_POOL[0]['pub']
+NEW_USER_PRIV_KEY = KEY_POOL[0]['priv']
+REF_PUB_KEY =  KEY_POOL[1]['pub']
+REF_PRIV_KEY = KEY_POOL[1]['priv']
+
+
+def make_block(length):
+    block = Block()
+    for i in range(length):
+        block.add_transaction(Transaction(
+            version=VERSION, tx_type=1, source=os.urandom(33),
+            amount=random.randint(1,10),
+            tx_date=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
+            target_user=us.urandom(33)))
+    return block
+
+def make_blockchain(length):
+    pass
+
 
 class TestBlockchainStart(unittest.TestCase):
 
@@ -71,7 +112,7 @@ class TestBlockchainStart(unittest.TestCase):
         data = birthday_block.pack_for_hash()
 
         # Assert
-        self.assertEqual(birthday_block.version, 0x01)
+        self.assertEqual(birthday_block.version, VERSION)
         self.assertEqual(birthday_block.close_date, datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc))
         self.assertEqual(birthday_block.previous_block_signature, EMPTY_HASH)
         self.assertEqual(birthday_block.merkle_root, EMPTY_HASH)
@@ -84,7 +125,7 @@ class TestBlockchainStart(unittest.TestCase):
         self.assertEqual(birthday_block.engagements, [])
         self.assertTrue(vk.verify(birthday_block.signature, data))
 
-        self.assertEqual(init_block.version, 0x01)
+        self.assertEqual(init_block.version, VERSION)
         self.assertEqual(init_block.close_date, None)
         self.assertEqual(init_block.previous_block_signature, birthday_block.signature)
         self.assertEqual(init_block.merkle_root, EMPTY_HASH)
@@ -144,7 +185,7 @@ class TestBlockchainValidate(unittest.TestCase):
         expected_data = init_block.pack_for_hash()
         
         # Assert
-        self.assertEqual(init_block.version, 1)
+        self.assertEqual(init_block.version, VERSION)
         self.assertEqual(init_block.close_date, datetime(2011, 12, 13, 12, 34, 56, tzinfo=pytz.utc))
         self.assertEqual(init_block.merkle_root, expected_merkle_root)
         self.assertEqual(init_block.guzis, 1)
@@ -156,6 +197,7 @@ class TestBlockchainValidate(unittest.TestCase):
         
 
 class TestBlockchainEq(unittest.TestCase):
+
     @freeze_time("2011-12-13 12:34:56")
     def test_two_identic_basic_bc_are_equals(self):
         # Arrange
@@ -216,6 +258,12 @@ class TestBlockchainSaveToFile(unittest.TestCase):
         # Assert
         self.assertIn(block0, content)
         self.assertIn(block1, content)
+
+
+class TestBlockchainAddTransaction(unittest.TestCase):
+
+    def test_previous_block_is_full(self):
+        pass
 
 
 @freeze_time("2011-12-13 12:34:56")

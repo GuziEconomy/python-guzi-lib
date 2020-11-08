@@ -8,7 +8,6 @@ from enum import Enum
 
 
 EMPTY_HASH = 0
-ENDIAN = 'big'
 VERSION = 1
 
 
@@ -17,11 +16,13 @@ def guzi_hash(data):
 
 
 class TxType(Enum):
+
     GUZI_CREATE = 0x00
     GUZA_CREATE = 0x01
 
 
 class Blockchain(list):
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             if len(self) !=len(other):
@@ -69,6 +70,7 @@ class Blockchain(list):
 
 
 class Packable:
+
     def pack(self):
         raise NotImplemented
 
@@ -77,6 +79,7 @@ class Packable:
 
 
 class Signable(Packable):
+
     def to_hash(self):
         return guzi_hash(self.pack_for_hash())
 
@@ -93,7 +96,7 @@ class Signable(Packable):
 class Block(Signable):
 
     def __init__(self,
-            version=1, close_date=None, previous_block_signature=None, merkle_root=None,
+            version=VERSION, close_date=None, previous_block_signature=None, merkle_root=None,
             signer=None, guzis=-1, guzas=-1, balance=-1, total=-1,
             b_transactions=None, b_engagements=None, signature=None):
         self.version = version
@@ -198,6 +201,7 @@ class Block(Signable):
 
 
 class BirthBlock(Block):
+
     def __init__(self, birthdate, new_user_pub_key, new_user_priv_key):
         super().__init__(
                 close_date=birthdate,
@@ -284,6 +288,7 @@ class Transaction(Signable):
 
 
 class GuziCreationTransaction(Transaction):
+
     """
 
     A GuziCreationTransaction is a Transaction to create daily guzis for user
@@ -297,6 +302,7 @@ class GuziCreationTransaction(Transaction):
 
 
 class GuzaCreationTransaction(Transaction):
+
     """
 
     A GuzaCreationTransaction is a Transaction to create daily guzas for user
