@@ -240,6 +240,9 @@ class Block(Signable):
     def is_signed(self):
         return self.signature is not None
 
+    def _contains(self, transaction):
+        return transaction in self.transactions
+
 
 class BirthBlock(Block):
 

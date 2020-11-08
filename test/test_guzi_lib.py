@@ -377,6 +377,38 @@ class TestBlockchainLoadFromBytes(unittest.TestCase):
         self.assertEqual(transactions[1], ref_transactions[1])
 
 
+class TestBlockContains(unittest.TestCase):
+
+    def test_should_return_false_if_transaction_not_in(self):
+        # Arrange
+        tx0 = GuziCreationTransaction(NEW_USER_PUB_KEY)
+        tx1 = GuziCreationTransaction(NEW_USER_PUB_KEY)
+        tx2 = GuziCreationTransaction(NEW_USER_PUB_KEY)
+        b = Block()
+
+        # Act
+        b.add_transactions([tx0, tx1, tx2])
+
+        # Assert
+        self.assertTrue(b._contains(tx0))
+        self.assertTrue(b._contains(tx1))
+        self.assertTrue(b._contains(tx2))
+
+
+    def test_should_return_true_if_transaction_in(self):
+        # Arrange
+        tx0 = GuziCreationTransaction(NEW_USER_PUB_KEY)
+        tx1 = GuziCreationTransaction(NEW_USER_PUB_KEY)
+        tx2 = GuziCreationTransaction(NEW_USER_PUB_KEY)
+        b = Block()
+
+        # Act
+        b.add_transactions([tx1, tx2])
+
+        # Assert
+        self.assertFalse(b._contains(tx0))
+
+
 class TestBlockPack(unittest.TestCase):
 
     def test_pack_for_hash(self):
