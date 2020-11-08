@@ -240,8 +240,14 @@ class Block(Signable):
     def is_signed(self):
         return self.signature is not None
 
-    def _contains(self, transaction):
+    def _containTx(self, transaction):
         return transaction in self.transactions
+
+    def _containUser(self, pubkey):
+        for t in self.transactions:
+            if pubkey in (t.target_user, t.target_company, t.source):
+                return True
+        return False
 
 
 class BirthBlock(Block):

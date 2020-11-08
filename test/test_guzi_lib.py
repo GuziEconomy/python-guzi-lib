@@ -227,7 +227,7 @@ class TestBlockchainSaveToFile(unittest.TestCase):
 
     @freeze_time("2011-12-13 12:34:56")
     def test_all_blocks_should_be_in(self):
-        """ """
+         
         # Arrange
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         blockchain = Blockchain()
@@ -257,7 +257,7 @@ class TestBlockchainAddTransaction(unittest.TestCase):
         return blockchain
 
     def test_last_block_takes_the_transaction(self):
-        """ """
+         
         # Arrange
         blockchain = self.make_active_blockchain()
         transaction = GuziCreationTransaction(NEW_USER_PUB_KEY)
@@ -273,7 +273,7 @@ class TestBlockchainAddTransaction(unittest.TestCase):
 class TestBlockchainAppend(unittest.TestCase):
 
     def test_should_raise_exception_if_last_block_not_signed(self):
-        """ """
+         
         # Arrange
         blockchain = Blockchain()
         blockchain.append(Block())
@@ -296,7 +296,7 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
         return blockchain_ref
 
     def test_hex_format(self):
-        """ """
+         
         # Arrange
         blockchain_ref = self.make_blockchain()
         outfile = BytesIO()
@@ -311,7 +311,7 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
         self.assertEqual(blockchain, blockchain_ref)
 
     def test_transactions_are_the_same(self):
-        """ """
+         
         # Arrange
         blockchain_ref = self.make_blockchain()
         blockchain_ref.validate(REF_PRIV_KEY)
@@ -344,7 +344,7 @@ class TestBlockchainLoadFromBytes(unittest.TestCase):
         return blockchain_ref
 
     def test_hex_format(self):
-        """ """
+         
         # Arrange
         blockchain_ref = self.make_blockchain()
         b = blockchain_ref.pack()
@@ -357,7 +357,7 @@ class TestBlockchainLoadFromBytes(unittest.TestCase):
         self.assertEqual(blockchain, blockchain_ref)
 
     def test_transactions_are_the_same(self):
-        """ """
+         
         # Arrange
         blockchain_ref = self.make_blockchain()
         blockchain_ref.validate(REF_PRIV_KEY)
@@ -380,6 +380,7 @@ class TestBlockchainLoadFromBytes(unittest.TestCase):
 class TestBlockContains(unittest.TestCase):
 
     def test_should_return_false_if_transaction_not_in(self):
+         
         # Arrange
         tx0 = GuziCreationTransaction(NEW_USER_PUB_KEY)
         tx1 = GuziCreationTransaction(NEW_USER_PUB_KEY)
@@ -390,12 +391,13 @@ class TestBlockContains(unittest.TestCase):
         b.add_transactions([tx0, tx1, tx2])
 
         # Assert
-        self.assertTrue(b._contains(tx0))
-        self.assertTrue(b._contains(tx1))
-        self.assertTrue(b._contains(tx2))
+        self.assertTrue(b._containTx(tx0))
+        self.assertTrue(b._containTx(tx1))
+        self.assertTrue(b._containTx(tx2))
 
 
     def test_should_return_true_if_transaction_in(self):
+         
         # Arrange
         tx0 = GuziCreationTransaction(NEW_USER_PUB_KEY)
         tx1 = GuziCreationTransaction(NEW_USER_PUB_KEY)
@@ -406,7 +408,39 @@ class TestBlockContains(unittest.TestCase):
         b.add_transactions([tx1, tx2])
 
         # Assert
-        self.assertFalse(b._contains(tx0))
+        self.assertFalse(b._containTx(tx0))
+
+class TestBlockContainUser(unittest.TestCase):
+
+    def test_should_return_false_if_transaction_not_in(self):
+         
+        # Arrange
+        tx0 = GuziCreationTransaction(KEY_POOL[0]["pub"])
+        tx1 = GuziCreationTransaction(KEY_POOL[1]["pub"])
+        tx2 = GuziCreationTransaction(KEY_POOL[2]["pub"])
+        b = Block()
+
+        # Act
+        b.add_transactions([tx0, tx1, tx2])
+
+        # Assert
+        self.assertTrue(b._containUser(KEY_POOL[0]["pub"]))
+        self.assertTrue(b._containUser(KEY_POOL[1]["pub"]))
+        self.assertTrue(b._containUser(KEY_POOL[2]["pub"]))
+
+
+    def test_should_return_true_if_transaction_in(self):
+         
+        # Arrange
+        tx0 = GuziCreationTransaction(KEY_POOL[0]["pub"])
+        tx1 = GuziCreationTransaction(KEY_POOL[1]["pub"])
+        b = Block()
+
+        # Act
+        b.add_transactions([tx0, tx1])
+
+        # Assert
+        self.assertFalse(b._containUser(KEY_POOL[2]["pub"]))
 
 
 class TestBlockPack(unittest.TestCase):
@@ -444,7 +478,7 @@ class TestBlockPack(unittest.TestCase):
 class TestBlock(unittest.TestCase):
 
     def test_to_hash(self):
-        """ """
+         
         # Arrange
         block = Block(
                 datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
@@ -460,7 +494,7 @@ class TestBlock(unittest.TestCase):
         self.assertEqual(result, bytes.fromhex('f8a98021264759eec491272b2d4939dcbc5f69ff3fba441ca6e05e1bc8daf4b5'))
 
     def test_sign(self):
-        """ """
+         
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
 
@@ -555,7 +589,7 @@ class TestBlock(unittest.TestCase):
         self.assertEqual(result, expected_merkle_root)
 
     def test_compute_transactions_with_1_guzis(self):
-        """ """
+         
         # Arrange
         block = Block(guzis=0)
         block.add_transaction(GuziCreationTransaction(NEW_USER_PUB_KEY))
@@ -567,7 +601,7 @@ class TestBlock(unittest.TestCase):
         self.assertEqual(block.guzis, 1)
 
     def test_compute_transactions_with_1_guzas(self):
-        """ """
+         
         # Arrange
         block = Block(guzas=0)
         block.add_transaction(GuzaCreationTransaction(NEW_USER_PUB_KEY))
@@ -582,7 +616,7 @@ class TestBlock(unittest.TestCase):
 class TestBlockIsSigned(unittest.TestCase):
 
     def test_signed_block_should_return_true(self):
-        """ """
+         
         # Arrange
         block = Block()
         block.sign(REF_PRIV_KEY)
@@ -591,7 +625,7 @@ class TestBlockIsSigned(unittest.TestCase):
         self.assertTrue(block.is_signed())
 
     def test_unsigned_block_should_return_false(self):
-        """ """
+         
         # Arrange
         block = Block()
 
@@ -602,7 +636,7 @@ class TestBlockIsSigned(unittest.TestCase):
 class TestBlockAddTransactions(unittest.TestCase):
 
     def test_should_increase_transaction_count(self):
-        """ """
+         
         # Arrange
         block = Block()
         tx = GuziCreationTransaction(EMPTY_HASH)
@@ -614,7 +648,7 @@ class TestBlockAddTransactions(unittest.TestCase):
         self.assertEqual(len(block.transactions), 1)
 
     def test_shouldnt_add_existing_transaction_twice(self):
-        """ """
+         
         # Arrange
         block = Block()
         tx = GuziCreationTransaction(EMPTY_HASH)
@@ -628,7 +662,7 @@ class TestBlockAddTransactions(unittest.TestCase):
         self.assertEqual(len(block.transactions), 1)
 
     def test_should_raise_exxception_if_too_much_transactions_in_last_block(self):
-        """ """
+         
         # Arrange
         block = Block()
         tx = GuziCreationTransaction(NEW_USER_PUB_KEY)
@@ -645,7 +679,7 @@ class TestTransactionSign(unittest.TestCase):
 
     @freeze_time("2011-12-13 12:34:56")
     def test_signature_should_be_valid(self):
-        """ """
+         
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
 
