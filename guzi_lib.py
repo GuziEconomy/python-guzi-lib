@@ -9,6 +9,7 @@ from enum import Enum
 
 EMPTY_HASH = 0
 VERSION = 1
+MAX_TX_IN_BLOCK = 30
 
 
 def guzi_hash(data):
@@ -21,8 +22,22 @@ class TxType(Enum):
     GUZA_CREATE = 0x01
 
 
-class Blockchain(list):
+class GuziError(Exception):
+    """ Base class for Guzi exceptions """
+    pass
 
+
+class UnsignedPreviousBlockError(GuziError):
+    pass
+
+
+class FullBlockError(GuziError):
+    pass
+
+
+class Blockchain(list):
+    """
+    """
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             if len(self) !=len(other):
@@ -49,8 +64,8 @@ class Blockchain(list):
         init_block = self[1]
         init_block.close_date = datetime.now(tz=pytz.utc)
         new_user_pub_key = birth_block.signer
-        init_block.add_transaction(GuziCreationTransaction(new_user_pub_key, birth_block))
-        init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key, birth_block))
+        init_block.add_transaction(GuziCreationTransaction(new_user_pub_key))
+        init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key))
         init_block.compute_transactions(birth_block)
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
@@ -67,6 +82,16 @@ class Blockchain(list):
             block_as_list = umsgpack.unpackb(b)
             block = Block(*block_as_list)
             self.append(block)
+
+    def append(self, block):
+        assert(isinstance(block, Block))
+        if len(self) > 0 and not self[-1].is_signed():
+            raise UnsignedPreviousBlockError
+        super().append(block)
+
+    def append_tx(self, transaction):
+        assert(isinstance(transaction, Transaction))
+        self[-1].add_transaction(transaction)
 
 
 class Packable:
@@ -125,7 +150,10 @@ class Block(Signable):
         return self.pack() == other.pack()
 
     def add_transaction(self, tx):
-        self.transactions.append(tx)
+        if len(self.transactions) >= MAX_TX_IN_BLOCK:
+            raise FullBlockError
+        if tx not in self.transactions:
+            self.transactions.append(tx)
 
     def add_transactions(self, tx):
         for t in tx:
@@ -198,6 +226,9 @@ class Block(Signable):
         for tx in self.transactions:
             if tx.tx_type == TxType.GUZA_CREATE.value:
                 self.guzas += tx.amount
+
+    def is_signed(self):
+        return self.signature is not None
 
 
 class BirthBlock(Block):
@@ -296,8 +327,8 @@ class GuziCreationTransaction(Transaction):
     value.
 
     """
-    def __init__(self, owner, last_block):
-        amount = 1 # TODO
+    def __init__(self, owner, total=0):
+        amount = 1 + total**(1/3)
         super().__init__(VERSION, TxType.GUZI_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc).timestamp())
 
 
@@ -311,6 +342,6 @@ class GuzaCreationTransaction(Transaction):
 
     """
     # TODO : check age > 18
-    def __init__(self, owner, last_block):
-        amount = 1 # TODO
+    def __init__(self, owner, total=0):
+        amount = 1 + total**(1/3)
         super().__init__(VERSION, TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc).timestamp())
