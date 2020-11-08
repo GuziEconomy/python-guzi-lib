@@ -110,6 +110,9 @@ class Blockchain(list):
             if block._containUser(pubkey):
                 return self[index:]
 
+    def sign_last_block(self, privkey):
+        self[-1].sign(privkey)
+
 
 class Packable:
 

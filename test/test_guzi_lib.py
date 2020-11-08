@@ -287,7 +287,7 @@ class TestBlockchainNewBlock(unittest.TestCase):
         # Arrange
         blockchain = Blockchain()
         blockchain.new_block()
-        blockchain[0].sign(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PRIV_KEY)
 
         # Act
         blockchain.new_block()
@@ -309,7 +309,7 @@ class TestBlockchainReduce(unittest.TestCase):
         tx3 = GuziCreationTransaction(KEY_POOL[3]["pub"])
         tx4 = GuziCreationTransaction(KEY_POOL[4]["pub"])
         blockchain[0].add_transactions([tx0, tx1, tx2])
-        blockchain[0].sign(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PRIV_KEY)
         blockchain.new_block()
         blockchain[1].add_transactions([tx3, tx4])
 
@@ -330,7 +330,7 @@ class TestBlockchainReduce(unittest.TestCase):
         tx3 = GuziCreationTransaction(KEY_POOL[3]["pub"])
         tx4 = GuziCreationTransaction(KEY_POOL[4]["pub"])
         blockchain[0].add_transactions([tx0, tx1, tx2])
-        blockchain[0].sign(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PRIV_KEY)
         blockchain.new_block()
         blockchain[1].add_transactions([tx3, tx4])
 
@@ -339,6 +339,21 @@ class TestBlockchainReduce(unittest.TestCase):
 
         # Assert
         self.assertEqual(len(result), 1)
+
+
+class TestBlockchainSignLastBlock(unittest.TestCase):
+
+    def test_basic_ok(self):
+
+        # Arrange
+        blockchain = Blockchain()
+        blockchain.new_block()
+        
+        # Act
+        blockchain.sign_last_block(REF_PRIV_KEY)
+
+        # Assert
+        self.assertTrue(blockchain[-1].is_signed())
 
 
 @freeze_time("2011-12-13 12:34:56")
