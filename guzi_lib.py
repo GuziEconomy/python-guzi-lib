@@ -38,6 +38,9 @@ class FullBlockError(GuziError):
 class Blockchain(list):
     """
     """
+    def __init__(self):
+        self.packer = BytePacker()
+
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             if len(self) !=len(other):
@@ -74,10 +77,10 @@ class Blockchain(list):
         """
         Save the content of the Blockchain to the given file
         """
-        umsgpack.pack([b.pack() for b in self], outfile)
+        self.packer.pack_bloockchain(self, outfile)
 
     def pack(self):
-        return umsgpack.packb([b.pack() for b in self])
+        return self.packer.pack_bloockchain(self)
 
     def load_from_file(self, infile):
         hashed_blocks = umsgpack.unpack(infile)
@@ -114,13 +117,47 @@ class Blockchain(list):
         self[-1].sign(privkey)
 
 
+class Packer:
+    def pack_transaction(self, transaction):
+        return NotImplemented
+
+    def pack_transaction_without_hash(self, transaction):
+        return NotImplemented
+
+    def pack_block(self, block):
+        return NotImplemented
+
+    def pack_block_without_hash(self, block):
+        return NotImplemented
+
+    def pack_bloockchain(self, blockchain, outfile=None):
+        return NotImplemented
+
+
+class BytePacker(Packer):
+
+    def pack_transaction(self, transaction):
+        return umsgpack.packb(transaction.as_full_list())
+
+    def pack_transaction_without_hash(self, transaction):
+        return umsgpack.packb(transaction.as_list())
+
+    def pack_block(self, block):
+        return umsgpack.packb(block.as_full_list())
+
+    def pack_block_without_hash(self, block):
+        return umsgpack.packb(block.as_list())
+
+    def pack_bloockchain(self, blockchain, outfile=None):
+        if outfile is not None:
+            umsgpack.pack([b.pack() for b in blockchain], outfile)
+        else:
+            return umsgpack.packb([b.pack() for b in blockchain])
+
+
 class Packable:
-
-    def pack(self):
-        raise NotImplemented
-
     def pack_for_hash(self):
-        raise NotImplemented
+        return NotImplemented
 
 
 class Signable(Packable):
@@ -157,6 +194,8 @@ class Block(Signable):
         self.engagements = []
         self.signature = signature
 
+        self.packer = BytePacker()
+
     def __str__(self):
         return "v{} at {} by {}... [{},{},{},{}]".format(
                 self.version, self.close_date,
@@ -179,8 +218,8 @@ class Block(Signable):
         for t in tx:
             self.add_transaction(t)
 
-    def pack_for_hash(self):
-        return umsgpack.packb([
+    def as_list(self):
+        return [
             self.version, # Version
             self.close_date.timestamp() if self.close_date else 0,
             self.previous_block_signature,
@@ -192,23 +231,22 @@ class Block(Signable):
             self.total,
             len(self.transactions),
             len(self.engagements)
-        ])
+        ]
 
-    def pack(self):
-        return umsgpack.packb([
-            self.version, # Version
-            self.close_date.timestamp() if self.close_date else 0,
-            self.previous_block_signature,
-            self.merkle_root,
-            self.signer,
-            self.guzis, 
-            self.guzas,
-            self.balance,
-            self.total,
+    def as_full_list(self):
+        l = self.as_list()[:-2]
+        l += [
             [t.pack() for t in self.transactions],
             [e.pack() for e in self.engagements],
             self.signature
-        ])
+        ]
+        return l
+
+    def pack_for_hash(self):
+        return self.packer.pack_block_without_hash(self)
+
+    def pack(self):
+        return self.packer.pack_block(self)
 
     def compute_merkle_root(self):
         self.merkle_root = self._tx_list_to_merkle_root(
@@ -292,6 +330,8 @@ class Transaction(Signable):
         self.detail = detail
         self.signature = signature
 
+        self.packer = BytePacker()
+
     def __str__(self):
         return "{}, {}, {}, {}".format(self.tx_type, self.date, self.source, self.amount)
 
@@ -313,13 +353,13 @@ class Transaction(Signable):
         self.detail == other.detail and
         self.signature == other.signature)
 
-    def pack_for_hash(self):
-        return umsgpack.packb([
+    def as_list(self):
+        return [
             self.version,
             self.tx_type,
-            self.date.timestamp(),
             self.source,
             self.amount,
+            self.date.timestamp(),
             self.target_company,
             self.target_user,
             self.start_index,
@@ -327,24 +367,18 @@ class Transaction(Signable):
             self.start_date,
             self.end_date,
             self.detail,
-        ])
+        ]
+
+    def as_full_list(self):
+        l = self.as_list()
+        l.append(self.signature)
+        return l
+
+    def pack_for_hash(self):
+        return self.packer.pack_transaction_without_hash(self)
 
     def pack(self):
-        return umsgpack.packb([
-            self.version,
-            self.tx_type,
-            self.source,
-            self.amount,
-            self.date.timestamp(),
-            self.target_company,
-            self.target_user,
-            self.start_index,
-            self.end_index,
-            self.start_date,
-            self.end_date,
-            self.detail,
-            self.signature
-        ])
+        return self.packer.pack_transaction(self)
 
 
 class GuziCreationTransaction(Transaction):
