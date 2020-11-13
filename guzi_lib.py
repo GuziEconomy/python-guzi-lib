@@ -12,6 +12,9 @@ VERSION = 1
 MAX_TX_IN_BLOCK = 30
 
 
+###########################################################
+# USEFULL CLASSES AND FUNCTIONS
+###########################################################
 def guzi_hash(data):
     return hashlib.sha256(data).digest()
 
@@ -33,6 +36,69 @@ class UnsignedPreviousBlockError(GuziError):
 
 class FullBlockError(GuziError):
     pass
+
+
+class Packer:
+    def pack_transaction(self, transaction):
+        return NotImplemented
+
+    def pack_transaction_without_hash(self, transaction):
+        return NotImplemented
+
+    def pack_block(self, block):
+        return NotImplemented
+
+    def pack_block_without_hash(self, block):
+        return NotImplemented
+
+    def pack_bloockchain(self, blockchain, outfile=None):
+        return NotImplemented
+
+
+class BytePacker(Packer):
+
+    def pack_transaction(self, transaction):
+        return umsgpack.packb(transaction.as_full_list())
+
+    def pack_transaction_without_hash(self, transaction):
+        return umsgpack.packb(transaction.as_list())
+
+    def pack_block(self, block):
+        return umsgpack.packb(block.as_full_list())
+
+    def pack_block_without_hash(self, block):
+        return umsgpack.packb(block.as_list())
+
+    def pack_bloockchain(self, blockchain, outfile=None):
+        if outfile is not None:
+            umsgpack.pack([b.pack() for b in blockchain], outfile)
+        else:
+            return umsgpack.packb([b.pack() for b in blockchain])
+
+
+class Packable:
+    def pack_for_hash(self):
+        return NotImplemented
+
+
+class Signable(Packable):
+
+    def to_hash(self):
+        return guzi_hash(self.pack_for_hash())
+
+    def sign(self, privkey):
+        """
+        privkey : int
+        return bytes
+        """
+        sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
+        self.signature = sk.sign(self.pack_for_hash())
+        return self.signature
+
+
+###########################################################
+# MODEL CLASSES
+###########################################################
 
 
 class Blockchain(list):
@@ -115,64 +181,6 @@ class Blockchain(list):
 
     def sign_last_block(self, privkey):
         self[-1].sign(privkey)
-
-
-class Packer:
-    def pack_transaction(self, transaction):
-        return NotImplemented
-
-    def pack_transaction_without_hash(self, transaction):
-        return NotImplemented
-
-    def pack_block(self, block):
-        return NotImplemented
-
-    def pack_block_without_hash(self, block):
-        return NotImplemented
-
-    def pack_bloockchain(self, blockchain, outfile=None):
-        return NotImplemented
-
-
-class BytePacker(Packer):
-
-    def pack_transaction(self, transaction):
-        return umsgpack.packb(transaction.as_full_list())
-
-    def pack_transaction_without_hash(self, transaction):
-        return umsgpack.packb(transaction.as_list())
-
-    def pack_block(self, block):
-        return umsgpack.packb(block.as_full_list())
-
-    def pack_block_without_hash(self, block):
-        return umsgpack.packb(block.as_list())
-
-    def pack_bloockchain(self, blockchain, outfile=None):
-        if outfile is not None:
-            umsgpack.pack([b.pack() for b in blockchain], outfile)
-        else:
-            return umsgpack.packb([b.pack() for b in blockchain])
-
-
-class Packable:
-    def pack_for_hash(self):
-        return NotImplemented
-
-
-class Signable(Packable):
-
-    def to_hash(self):
-        return guzi_hash(self.pack_for_hash())
-
-    def sign(self, privkey):
-        """
-        privkey : int
-        return bytes
-        """
-        sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
-        self.signature = sk.sign(self.pack_for_hash())
-        return self.signature
 
 
 class Block(Signable):
@@ -384,11 +392,10 @@ class Transaction(Signable):
 class GuziCreationTransaction(Transaction):
 
     """
-
-    A GuziCreationTransaction is a Transaction to create daily guzis for user
-    by himself, to himself. It only depends of current block total accumulated
-    value.
-
+    A GuziCreationTransaction is done by a user to himself, creating his own
+    Guzis. This transaction only contains date, user id and the amount of
+    created guzis.
+    A user can create (total)^(1/3)+1 Guzis/day
     """
     def __init__(self, owner, total=0):
         amount = 1 + total**(1/3)
@@ -398,13 +405,113 @@ class GuziCreationTransaction(Transaction):
 class GuzaCreationTransaction(Transaction):
 
     """
-
-    A GuzaCreationTransaction is a Transaction to create daily guzas for user
-    by himself, to himself. It only depends of current block total accumulated
-    value and birthday date, which must imply age > 18 years old.
-
+    A GuzaCreationTransaction is done by a user to himself, creating his own
+    Guzas. This transaction only contains date, user id and the amount of
+    created guzas.
+    A user can create (total)^(1/3)+1 Guzas/day
     """
     # TODO : check age > 18
     def __init__(self, owner, total=0):
         amount = 1 + total**(1/3)
         super().__init__(VERSION, TxType.GUZA_CREATE.value, owner, amount, tx_date=datetime.now(tz=pytz.utc).timestamp())
+
+
+class PaymentTransaction(Transaction):
+
+    """
+    This is the MAIN transaction. When a user spend guzis to another one or
+    to a company ; or from a company to another one.
+    """
+    pass
+
+
+class GuziEngagementTransaction(Transaction):
+
+    """
+    An Engagement is what we usually call in classical money systems a loan.
+    It's a contract sealed in the blockchain saying "I commit to pay X Guzis
+    each day during Y days for a total amount of Z=X*Y"
+    """
+    pass
+
+
+class GuzaEngagementTransaction(Transaction):
+
+    """
+    An Engagement is what we usually call in classical money systems a loan.
+    It's a contract sealed in the blockchain saying "I commit to pay X Guzas
+    each day during Y days for a total amount of Z=X*Y"
+    """
+    pass
+
+
+class RefusedTransaction(Transaction):
+
+    """
+    A user has 15 days to refuse a transaction, unless he adds it to his 
+    blockchain in which case he cannot refuse it anymore.
+    When Alice receives a payment transaction and refuses it, she neither adds
+    the payment transaction nor the refusing one to her blockchain. But the
+    sender of the payment transaction must add the refusing transaction as
+    proof that he can refund his account with refused guzis.
+    """
+    pass
+
+
+class OwnerSetTransaction(Transaction):
+
+    """
+    Owners of a company are users who gets guzis earned by the company in
+    excess of the workers' salaries. Every 25 of each month, the company
+    must send the guzis to each owner (with setted pro rata).
+    """
+    pass
+
+
+class AdminSetTransaction(Transaction):
+
+    """
+    Admins are users who can modify roles of a company.
+    There cannot have no admin for a company.
+    """
+    pass
+
+
+class WorderSetTransaction(Transaction):
+
+    """
+    Workers are users who get a salary for their job in a company. Every 25 of
+    each month, the company must send the setted value to each worker (or the
+    maximum it can in case of guzi diet).
+    """
+    pass
+
+
+class PayerSetTransaction(Transaction):
+
+    """
+    Payers are users who can send payment orders to the company.
+    """
+    pass
+
+
+class PaymentOrderTransaction(Transaction):
+
+    """
+    As a company does not have it's own will, it must obey some users to know
+    which other company it has to pay. This is why PaymentOrders are here.
+    A user being payer in a company can send it payment order. The company
+    will then send the payment to the given target or return an error message.
+    """
+    pass
+
+
+class LeavingOrderTransaction(Transaction):
+
+    """
+    Any user can, at any moment, leave a company he has a role in,
+    except if he is the last admin. There must always be at least one admin
+    in a company. So if he really wants to leave, he can set anyone as admin of
+    the company and then leave. In some case, that could be funny, in fact.
+    """
+    pass
