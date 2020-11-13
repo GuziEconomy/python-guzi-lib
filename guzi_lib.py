@@ -23,6 +23,17 @@ class TxType(Enum):
 
     GUZI_CREATE = 0x00
     GUZA_CREATE = 0x01
+    PAYMENT = 0x02
+    GUZI_ENGAGEMENT = 0x03
+    GUZA_ENGAGEMENT = 0x04
+    REFUSAL = 0x05
+    OWNER_SET = 0x10
+    ADMIN_SET = 0x11
+    WORKER_SET = 0x12
+    PAYER_SET = 0x13
+    PAY_ORDER = 0x14
+    LEAVE_ORDER = 0x15
+
 
 
 class GuziError(Exception):
