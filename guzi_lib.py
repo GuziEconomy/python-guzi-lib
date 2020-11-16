@@ -134,9 +134,7 @@ class Blockchain(list):
         init_block = Block(
                 previous_block_signature=self[0].signature,
                 signer=ref_pubkey,
-                merkle_root=EMPTY_HASH,
-                signature=EMPTY_HASH,
-                guzis=0, guzas=0, balance=0, total=0)
+                merkle_root=EMPTY_HASH)
         self.append(init_block)
 
     def validate(self, ref_privkey):
@@ -146,7 +144,8 @@ class Blockchain(list):
         new_user_pub_key = birth_block.signer
         init_block.add_transaction(GuziCreationTransaction(new_user_pub_key))
         init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key))
-        init_block.compute_transactions(birth_block)
+        init_block.guzi_index = (init_block.close_date.isoformat(), 0)
+        init_block.guza_index = (init_block.close_date.isoformat(), 0)
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
 
@@ -167,12 +166,6 @@ class Blockchain(list):
         hashed_blocks = umsgpack.unpackb(b)
         self._from_hashed_blocks(hashed_blocks)
 
-    def _from_hashed_blocks(self, hashed_blocks):
-        for b in hashed_blocks:
-            block_as_list = umsgpack.unpackb(b)
-            block = Block(*block_as_list)
-            self.append(block)
-
     def new_block(self):
         if len(self) > 0 and not self[-1].is_signed():
             raise UnsignedPreviousBlockError
@@ -181,32 +174,57 @@ class Blockchain(list):
             block.previous_block_signature = self[-1].signature
         super().append(block)
 
-    def append_tx(self, transaction):
+    def add_transaction(self, transaction):
         assert(isinstance(transaction, Transaction))
         self[-1].add_transaction(transaction)
+
+    def guzis(self):
+        """ Return int number of guzis availables """
+        pass
+
+    def guzas(self):
+        """ Return int number of guzas availables """
+        pass
 
     def _reduce(self, pubkey):
         for index, block in reversed(list(enumerate(self))):
             if block._containUser(pubkey):
                 return self[index:]
 
+    def _from_hashed_blocks(self, hashed_blocks):
+        for b in hashed_blocks:
+            block_as_list = umsgpack.unpackb(b)
+            block = Block(*block_as_list)
+            self.append(block)
+
     def sign_last_block(self, privkey):
         self[-1].sign(privkey)
+
+    def find_block_by_date(self, date):
+        for index, block in reversed(list(enumerate(self))):
+            if block.close_date is not None and block.close_date.date() < date:
+                return self[index+1]
+
+    def get_next_guzis(self, amount):
+        block = self.cursor_block
+        tx = self.cursor_tx
+        guzi = self.cursor_guzi
+        return []
 
 
 class Block(Signable):
 
     def __init__(self,
             version=VERSION, close_date=None, previous_block_signature=None, merkle_root=None,
-            signer=None, guzis=-1, guzas=-1, balance=-1, total=-1,
+            signer=None, guzi_index=None, guza_index=None, balance=None, total=None,
             b_transactions=None, b_engagements=None, signature=None):
         self.version = version
         self.close_date = datetime.utcfromtimestamp(close_date).replace(tzinfo=pytz.utc) if close_date else None
         self.previous_block_signature = previous_block_signature
         self.merkle_root = merkle_root
         self.signer = signer
-        self.guzis = guzis
-        self.guzas = guzas
+        self.guzi_index = guzi_index
+        self.guza_index = guza_index
         self.balance = balance
         self.total = total
         self.transactions = [Transaction(*umsgpack.unpackb(b_tx)) for b_tx in b_transactions] if b_transactions else []
@@ -219,15 +237,17 @@ class Block(Signable):
         return "v{} at {} by {}... [{},{},{},{}]".format(
                 self.version, self.close_date,
                 self.signer.hex()[:10] if self.signer else "unsigned",
-                self.guzis, self.guzas, self.balance, self.total)
+                self.guzis(), self.guzas(), self.balance, self.total)
 
     def __repr__(self):
         return self.__str__()
 
     def __eq__(self, other):
-        return self.pack() == other.pack()
+        return isinstance(other, Block) and self.pack() == other.pack()
 
     def add_transaction(self, tx):
+        if self.is_signed():
+            raise FullBlockError
         if len(self.transactions) >= MAX_TX_IN_BLOCK:
             raise FullBlockError
         if tx not in self.transactions:
@@ -237,15 +257,25 @@ class Block(Signable):
         for t in tx:
             self.add_transaction(t)
 
+    def find_transaction(self, tx_type, date):
+        """
+        Return the transaction of given tx_type with given signature date
+        If no transaction is found, return None
+        """
+        for t in self.transactions:
+            if tx_type == t.tx_type and date == t.date.date():
+                return t
+        return None
+
     def as_list(self):
         return [
-            self.version, # Version
+            self.version,
             self.close_date.timestamp() if self.close_date else 0,
             self.previous_block_signature,
             self.merkle_root,
             self.signer,
-            self.guzis, 
-            self.guzas,
+            self.guzi_index, 
+            self.guza_index,
             self.balance,
             self.total,
             len(self.transactions),
@@ -272,6 +302,19 @@ class Block(Signable):
             [t.to_hash() for t in self.transactions])
         return self.merkle_root
 
+    #def compute_transactions(self, previous_block = None):
+    #    self.guzis = 
+    #    for tx in self.transactions:
+    #        if tx.tx_type == TxType.GUZI_CREATE.value:
+    #            self.guzis += tx.amount
+    #    self.guzas = previous_block.guzas if previous_block else 0
+    #    for tx in self.transactions:
+    #        if tx.tx_type == TxType.GUZA_CREATE.value:
+    #            self.guzas += tx.amount
+
+    def is_signed(self):
+        return self.signature is not None
+
     def _tx_list_to_merkle_root(self, hashlist, firstcall=True):
         if len(hashlist) == 0:
             return None
@@ -294,19 +337,6 @@ class Block(Signable):
     def _hash_pair(self, hash0, hash1):
         return hashlib.sha256(hash0+hash1).digest()
 
-    def compute_transactions(self, previous_block = None):
-        self.guzis = previous_block.guzis if previous_block else 0
-        for tx in self.transactions:
-            if tx.tx_type == TxType.GUZI_CREATE.value:
-                self.guzis += tx.amount
-        self.guzas = previous_block.guzas if previous_block else 0
-        for tx in self.transactions:
-            if tx.tx_type == TxType.GUZA_CREATE.value:
-                self.guzas += tx.amount
-
-    def is_signed(self):
-        return self.signature is not None
-
     def _containTx(self, transaction):
         return transaction in self.transactions
 
@@ -322,9 +352,7 @@ class BirthBlock(Block):
     def __init__(self, birthdate, new_user_pub_key, new_user_priv_key):
         super().__init__(
                 close_date=birthdate,
-                signer=new_user_pub_key,
-                guzis=0, guzas=0,
-                balance=0, total=0)
+                signer=new_user_pub_key)
         self.previous_block_signature = EMPTY_HASH
         self.merkle_root = EMPTY_HASH
         self.sign(new_user_priv_key)
@@ -333,8 +361,7 @@ class BirthBlock(Block):
 class Transaction(Signable):
 
     def __init__(self, version, tx_type, source, amount, tx_date=None,
-            target_company="", target_user="", start_index=-1, end_index=-1,
-            start_date=-1, end_date=-1, detail="", signature=None):
+            target_company="", target_user="", guzis_positions=[], detail="", signature=None):
         self.version = version
         self.tx_type = tx_type
         self.date = datetime.utcfromtimestamp(tx_date).replace(tzinfo=pytz.utc) if tx_date else tx_date
@@ -342,10 +369,7 @@ class Transaction(Signable):
         self.amount = amount
         self.target_company = target_company
         self.target_user = target_user
-        self.start_index = start_index
-        self.end_index = end_index
-        self.start_date = start_index
-        self.end_date = end_date
+        self.guzis_positions = guzis_positions
         self.detail = detail
         self.signature = signature
 
@@ -358,19 +382,17 @@ class Transaction(Signable):
         return self.__str__()
 
     def __eq__(self, other):
-        return (self.version == other.version and
-        self.tx_type == other.tx_type and
-        self.date == other.date and
-        self.source == other.source and
-        self.amount == other.amount and
-        self.target_company == other.target_company and
-        self.target_user == other.target_user and
-        self.start_index == other.start_index and
-        self.end_index == other.end_index and
-        self.start_date == other.start_date and
-        self.end_date == other.end_date and
-        self.detail == other.detail and
-        self.signature == other.signature)
+        return (isinstance(other, Transaction) and
+                self.version == other.version and
+                self.tx_type == other.tx_type and
+                self.date == other.date and
+                self.source == other.source and
+                self.amount == other.amount and
+                self.target_company == other.target_company and
+                self.target_user == other.target_user and
+                self.guzis_positions == other.guzis_positions and
+                self.detail == other.detail and
+                self.signature == other.signature)
 
     def as_list(self):
         return [
@@ -381,10 +403,7 @@ class Transaction(Signable):
             self.date.timestamp(),
             self.target_company,
             self.target_user,
-            self.start_index,
-            self.end_index,
-            self.start_date,
-            self.end_date,
+            self.guzis_positions,
             self.detail,
         ]
 
@@ -433,7 +452,25 @@ class PaymentTransaction(Transaction):
     This is the MAIN transaction. When a user spend guzis to another one or
     to a company ; or from a company to another one.
     """
-    pass
+    def __init__(self, last_block, source, target, amount, is_company_target=False, detail=None):
+        tx_date = datetime.now(tz=pytz.utc)
+        target_company = target if is_company_target is not None else None
+        target_user = target if is_company_target is None else None
+        guzis_positions = self.get_guzi_positions(last_block, amount)
+
+        super().__init__(
+                VERSION, TxType.PAYMENT.value, source, amount,
+                tx_date=tx_date.timestamp() ,
+                target_company=target_company,
+                target_user=target_user,
+                guzis_positions=guzis_positions,
+                detail=detail
+                )
+
+    def get_guzi_positions(self, current_block, amount):
+        i = current_block.guzi_index
+        return [([str(tx_date.year)+str(tx_date.month)+str(tx_date.day)],list(range(amount)))]
+
 
 
 class GuziEngagementTransaction(Transaction):
