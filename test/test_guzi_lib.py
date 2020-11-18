@@ -42,7 +42,7 @@ REF_PUB_KEY =  KEY_POOL[1]['pub']
 REF_PRIV_KEY = KEY_POOL[1]['priv']
 
 
-class TestBlockchainStart(unittest.TestCase):
+class TestUserBlockchainStart(unittest.TestCase):
 
     def test_should_create_empty_block(self):
         """
@@ -92,7 +92,7 @@ class TestBlockchainStart(unittest.TestCase):
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         
         # Act
-        blockchain = Blockchain()
+        blockchain = UserBlockchain()
         blockchain.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         birthday_block, init_block = blockchain
         data = birthday_block.pack_for_hash()
@@ -117,7 +117,7 @@ class TestBlockchainStart(unittest.TestCase):
         self.assertIsNone(init_block.signature)
 
 
-class TestBlockchainValidate(unittest.TestCase):
+class TestUserBlockchainValidate(unittest.TestCase):
 
     @freeze_time("2011-12-13 12:34:56")
     def test_validate_should_fill_init_blocks(self):
@@ -154,7 +154,7 @@ class TestBlockchainValidate(unittest.TestCase):
         vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
 
         birthdate = datetime(1998, 12, 21).timestamp()
-        blockchain = Blockchain()
+        blockchain = UserBlockchain()
         blockchain.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         # Act
         blockchain.validate(REF_PRIV_KEY)
@@ -176,7 +176,7 @@ class TestBlockchainEq(unittest.TestCase):
     def test_two_identic_basic_bc_are_equals(self):
         # Arrange
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        bc1 = Blockchain()
+        bc1 = UserBlockchain()
         bc1.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
 
         # Assert
@@ -186,10 +186,10 @@ class TestBlockchainEq(unittest.TestCase):
     def test_different_birthdate(self):
         # Arrange
         birthdate1 = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        bc1 = Blockchain()
+        bc1 = UserBlockchain()
         bc1.start(birthdate1, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         birthdate2 = datetime(1999, 11, 23,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        bc2 = Blockchain()
+        bc2 = UserBlockchain()
         bc2.start(birthdate2, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
 
         # Assert
@@ -200,10 +200,10 @@ class TestBlockchainEq(unittest.TestCase):
     def test_different_keys(self):
         # Arrange
         birthdate1 = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        bc1 = Blockchain()
+        bc1 = UserBlockchain()
         bc1.start(birthdate1, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         birthdate2 = datetime(1999, 11, 23,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        bc2 = Blockchain()
+        bc2 = UserBlockchain()
         bc2.start(birthdate2, REF_PUB_KEY, REF_PRIV_KEY, NEW_USER_PUB_KEY)
 
         # Assert
@@ -218,7 +218,7 @@ class TestBlockchainSaveToFile(unittest.TestCase):
          
         # Arrange
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        blockchain = Blockchain()
+        blockchain = UserBlockchain()
         blockchain.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         blockchain.validate(REF_PRIV_KEY)
         block0 = blockchain[0].pack().hex()
@@ -239,7 +239,7 @@ class TestBlockchainAddTransaction(unittest.TestCase):
 
     def make_active_blockchain(self):
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        blockchain = Blockchain()
+        blockchain = UserBlockchain()
         blockchain.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         blockchain.validate(REF_PRIV_KEY)
         blockchain.new_block()
@@ -345,29 +345,11 @@ class TestBlockchainSignLastBlock(unittest.TestCase):
         self.assertTrue(blockchain[-1].is_signed())
 
 
-class TestBlockchainGetNextGuzis(unittest.TestCase):
-
-    def test_base_case(self):
-        # Arrange
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        blockchain = Blockchain()
-        blockchain.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        blockchain.validate(REF_PRIV_KEY)
-        blockchain.new_block()
-        blockchain.add_transaction(GuziCreationTransaction(None, 4**3))
-
-        # Act
-        result = blockchain.get_next_guzis(4)
-
-        # Assert
-        self.assertEqual([(["2011-12-13"], [0, 1, 2, 3])], result)
-
-
 @freeze_time("2011-12-13 12:34:56")
 class TestBlockchainLoadFromFile(unittest.TestCase):
 
     def make_blockchain(self):
-        blockchain_ref = Blockchain()
+        blockchain_ref = UserBlockchain()
         blockchain_ref.start(
                 birthdate=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
                 new_pubkey=NEW_USER_PUB_KEY,
@@ -415,7 +397,7 @@ class TestBlockchainLoadFromFile(unittest.TestCase):
 class TestBlockchainLoadFromBytes(unittest.TestCase):
 
     def make_blockchain(self):
-        blockchain_ref = Blockchain()
+        blockchain_ref = UserBlockchain()
         blockchain_ref.start(
                 birthdate=datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp(),
                 new_pubkey=NEW_USER_PUB_KEY,
@@ -461,7 +443,7 @@ class TestBlockchainFindBlockByDate(unittest.TestCase):
 
     def make_blockchain(self):
         birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
-        blockchain = Blockchain()
+        blockchain = UserBlockchain()
         blockchain.start(birthdate, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY)
         blockchain.validate(REF_PRIV_KEY)
         blockchain.new_block()
@@ -504,6 +486,23 @@ class TestBlockchainFindBlockByDate(unittest.TestCase):
 
         # Assert
         self.assertIsNone(found_block)
+
+
+class TestBlockchainGetAvailableGuzis(unittest.TestCase):
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_base_case(self):
+        # Arrange
+        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
+        blockchain = UserBlockchain()
+        blockchain.new_block()
+        blockchain.add_transaction(GuziCreationTransaction(None, 4**3))
+
+        # Act
+        result = blockchain._get_available_guzis()
+
+        # Assert
+        self.assertEqual([(["2011-12-13"], [0, 1, 2, 3, 4])], result)
 
 
 class TestBlockContains(unittest.TestCase):

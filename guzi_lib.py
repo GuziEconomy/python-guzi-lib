@@ -113,13 +113,17 @@ class Signable(Packable):
 
 
 class Blockchain(list):
+
     """
     """
     def __init__(self):
         self.packer = BytePacker()
+        self.cursor_block = 0
+        self.cursor_tx = 0
+        self.cursor_guzi = 0
 
     def __eq__(self, other):
-        if isinstance(other, self.__class__):
+        if isinstance(other, Blockchain):
             if len(self) !=len(other):
                 return False
             for b1, b2 in zip(self, other):
@@ -128,6 +132,86 @@ class Blockchain(list):
             return True
         else:
             return False
+
+    def save_to_file(self, outfile):
+        """
+        Save the content of the Blockchain to the given file
+        """
+        self.packer.pack_bloockchain(self, outfile)
+
+    def pack(self):
+        return self.packer.pack_bloockchain(self)
+
+    def load_from_file(self, infile):
+        hashed_blocks = umsgpack.unpack(infile)
+        self._from_hashed_blocks(hashed_blocks)
+        # guzi_date, self.cursor_guzi = self[-1].guzi_index
+        # self.cursor_block = self.find_block_by_date(guzi_date)
+        # self.cursor_tx = self.cursor_block.find_transaction(TxType.GUZI_CREATE.value, guzi_date)
+
+    def load_from_bytes(self, b):
+        hashed_blocks = umsgpack.unpackb(b)
+        self._from_hashed_blocks(hashed_blocks)
+
+    def find_block_by_date(self, date):
+        for index, block in reversed(list(enumerate(self))):
+            if block.close_date is not None and block.close_date.date() < date:
+                return self[index+1]
+
+    def new_block(self):
+        if len(self) > 0 and not self[-1].is_signed():
+            raise UnsignedPreviousBlockError
+        block = Block()
+        if len(self) > 0:
+            block.previous_block_signature = self[-1].signature
+        super().append(block)
+
+    def add_transaction(self, blockchain):
+        """Return None or refusal transaction
+
+        1. Check the given blockchain
+        2. Add the last transaction from this blockchain to itself
+        3. Add random transactions from this blockchain to itself
+
+        Return refusal transaction if blockchain is invalid
+
+        Must check which tx_type transaction is to decide what to do with it.
+        """
+        assert(isinstance(transaction, Transaction))
+        self[-1].add_transaction(transaction)
+
+    def refuse_transaction(self, transaction):
+        """Return a refusal transaction
+
+        If transaction was already added, remove it from current block.
+        If transaction was already sealed, raise Error
+        """
+        pass
+
+    def is_valid(cls, blockchain):
+        """Return boolean
+
+        True if given blockchain seems valid
+        False if an incoherence was detected
+        """
+        pass
+
+    def sign_last_block(self, privkey):
+        self[-1].sign(privkey)
+
+    def _reduce(self, pubkey):
+        for index, block in reversed(list(enumerate(self))):
+            if block._containUser(pubkey):
+                return self[index:]
+
+    def _from_hashed_blocks(self, hashed_blocks):
+        for b in hashed_blocks:
+            block_as_list = umsgpack.unpackb(b)
+            block = Block(*block_as_list)
+            self.append(block)
+
+
+class UserBlockchain(Blockchain):
 
     def start(self, birthdate, new_pubkey, new_privkey, ref_pubkey):
         self.append(BirthBlock(birthdate, new_pubkey, new_privkey))
@@ -149,67 +233,71 @@ class Blockchain(list):
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
 
-    def save_to_file(self, outfile):
-        """
-        Save the content of the Blockchain to the given file
-        """
-        self.packer.pack_bloockchain(self, outfile)
-
-    def pack(self):
-        return self.packer.pack_bloockchain(self)
-
-    def load_from_file(self, infile):
-        hashed_blocks = umsgpack.unpack(infile)
-        self._from_hashed_blocks(hashed_blocks)
-
-    def load_from_bytes(self, b):
-        hashed_blocks = umsgpack.unpackb(b)
-        self._from_hashed_blocks(hashed_blocks)
-
-    def new_block(self):
-        if len(self) > 0 and not self[-1].is_signed():
-            raise UnsignedPreviousBlockError
-        block = Block()
-        if len(self) > 0:
-            block.previous_block_signature = self[-1].signature
-        super().append(block)
-
-    def add_transaction(self, transaction):
-        assert(isinstance(transaction, Transaction))
-        self[-1].add_transaction(transaction)
-
-    def guzis(self):
+    def make_daily_guzis(self, date=None):
         """ Return int number of guzis availables """
         pass
 
-    def guzas(self):
+    def make_daily_guzas(self, date=None):
         """ Return int number of guzas availables """
         pass
 
-    def _reduce(self, pubkey):
-        for index, block in reversed(list(enumerate(self))):
-            if block._containUser(pubkey):
-                return self[index:]
+    def pay_to_user(self, target, amount):
+        pass
 
-    def _from_hashed_blocks(self, hashed_blocks):
-        for b in hashed_blocks:
-            block_as_list = umsgpack.unpackb(b)
-            block = Block(*block_as_list)
-            self.append(block)
+    def pay_to_company(self, target, amount):
+        pass
 
-    def sign_last_block(self, privkey):
-        self[-1].sign(privkey)
+    def engage_guzis_to_user(self, target, days, daily_amount):
+        pass
 
-    def find_block_by_date(self, date):
-        for index, block in reversed(list(enumerate(self))):
-            if block.close_date is not None and block.close_date.date() < date:
-                return self[index+1]
+    def engage_guzis_to_company(self, target, days, daily_amount):
+        pass
 
-    def get_next_guzis(self, amount):
-        block = self.cursor_block
-        tx = self.cursor_tx
-        guzi = self.cursor_guzi
-        return []
+    def engage_guzas(self, target, days, daily_amount):
+        pass
+
+    def _get_available_guzis(self, amount=-1):
+        """Return amount number of first available Guzis
+
+        If amount=-1, return allavailable guzis
+        """
+        result = []
+        tx_index = self.cursor_tx
+        for b in self[self.cursor_block:]:
+            for tx in b.transactions[tx_index:]:
+                if tx.tx_type == TxType.GUZI_CREATE.value:
+                    result.append(([tx.date.date().isoformat()], list(range(self.cursor_guzi, tx.amount))))
+            tx_index = 0
+
+        return result
+
+
+class CompanyBlockchain(Blockchain):
+
+    def start(self, creator_pubkey, roles):
+        """Return None
+
+        Raise an error if no admin is given in roles
+        Raise an error if no owner is given in roles
+        """
+        pass
+
+    def add_transaction(self, blockchain):
+        """Return Transaction or None
+
+        Mus handle multiple cases :
+        - payment given
+        - engagement given
+        """
+        pass
+
+    def obey_order(self, order):
+        """Return Transaction"""
+        pass
+
+    def refuse_transaction(self, transaction):
+        """Return Transaction"""
+        pass
 
 
 class Block(Signable):
@@ -237,7 +325,7 @@ class Block(Signable):
         return "v{} at {} by {}... [{},{},{},{}]".format(
                 self.version, self.close_date,
                 self.signer.hex()[:10] if self.signer else "unsigned",
-                self.guzis(), self.guzas(), self.balance, self.total)
+                self.guzi_index, self.guza_index, self.balance, self.total)
 
     def __repr__(self):
         return self.__str__()
@@ -366,7 +454,7 @@ class Transaction(Signable):
         self.tx_type = tx_type
         self.date = datetime.utcfromtimestamp(tx_date).replace(tzinfo=pytz.utc) if tx_date else tx_date
         self.source = source
-        self.amount = amount
+        self.amount = int(amount)
         self.target_company = target_company
         self.target_user = target_user
         self.guzis_positions = guzis_positions
@@ -418,6 +506,41 @@ class Transaction(Signable):
     def pack(self):
         return self.packer.pack_transaction(self)
 
+
+class Company:
+
+    def __init__(self, company_pubkey, my_pubkey):
+        pass
+
+    def set_owner_order(self, my_privkey, owner, value, detail=""):
+        pass
+
+    def set_admin_order(self, my_privkey, admin, value, detail=""):
+        pass
+
+    def set_worker_order(self, my_privkey, worker, value, detail=""):
+        pass
+
+    def set_payer_order(self, my_privkey, payer, value, detail=""):
+        pass
+
+    def leave_order(self, my_privkey, detail=""):
+        pass
+
+    def pay_order(self, my_privkey, target, amount):
+        pass
+
+
+# TODO
+# Maybe those Transactions classes are dumb
+# In fact, the Blockchain should do it all :
+# class Blockchain:
+# (...)
+#   def make_daily_guzis(self, date=None):
+#   def make_daily_guzas(self, date=None):
+#   def pay(self, target, amount, target_is_a_company=True):
+#   def engage_guzis(self, target, length, daily_amount, target_is_a_company=True):
+#   def engage_guzas(self, target, length, daily_amount):
 
 class GuziCreationTransaction(Transaction):
 
@@ -502,64 +625,5 @@ class RefusedTransaction(Transaction):
     the payment transaction nor the refusing one to her blockchain. But the
     sender of the payment transaction must add the refusing transaction as
     proof that he can refund his account with refused guzis.
-    """
-    pass
-
-
-class OwnerSetTransaction(Transaction):
-
-    """
-    Owners of a company are users who gets guzis earned by the company in
-    excess of the workers' salaries. Every 25 of each month, the company
-    must send the guzis to each owner (with setted pro rata).
-    """
-    pass
-
-
-class AdminSetTransaction(Transaction):
-
-    """
-    Admins are users who can modify roles of a company.
-    There cannot have no admin for a company.
-    """
-    pass
-
-
-class WorderSetTransaction(Transaction):
-
-    """
-    Workers are users who get a salary for their job in a company. Every 25 of
-    each month, the company must send the setted value to each worker (or the
-    maximum it can in case of guzi diet).
-    """
-    pass
-
-
-class PayerSetTransaction(Transaction):
-
-    """
-    Payers are users who can send payment orders to the company.
-    """
-    pass
-
-
-class PaymentOrderTransaction(Transaction):
-
-    """
-    As a company does not have it's own will, it must obey some users to know
-    which other company it has to pay. This is why PaymentOrders are here.
-    A user being payer in a company can send it payment order. The company
-    will then send the payment to the given target or return an error message.
-    """
-    pass
-
-
-class LeavingOrderTransaction(Transaction):
-
-    """
-    Any user can, at any moment, leave a company he has a role in,
-    except if he is the last admin. There must always be at least one admin
-    in a company. So if he really wants to leave, he can set anyone as admin of
-    the company and then leave. In some case, that could be funny, in fact.
     """
     pass
