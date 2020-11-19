@@ -142,6 +142,9 @@ class Blockchain(list):
     def pack(self):
         return self.packer.pack_bloockchain(self)
 
+    def as_email(self):
+        pass
+
     def load_from_file(self, infile):
         hashed_blocks = umsgpack.unpack(infile)
         self._from_hashed_blocks(hashed_blocks)
@@ -166,7 +169,7 @@ class Blockchain(list):
             block.previous_block_signature = self[-1].signature
         super().append(block)
 
-    def add_transaction(self, blockchain):
+    def add_transaction_from_blockchain(self, blockchain):
         """Return None or refusal transaction
 
         1. Check the given blockchain
@@ -177,6 +180,9 @@ class Blockchain(list):
 
         Must check which tx_type transaction is to decide what to do with it.
         """
+        pass
+
+    def add_transaction(self, transaction):
         assert(isinstance(transaction, Transaction))
         self[-1].add_transaction(transaction)
 
@@ -390,6 +396,9 @@ class Block(Signable):
             [t.to_hash() for t in self.transactions])
         return self.merkle_root
 
+    def as_email(self):
+        pass
+
     #def compute_transactions(self, previous_block = None):
     #    self.guzis = 
     #    for tx in self.transactions:
@@ -505,6 +514,9 @@ class Transaction(Signable):
 
     def pack(self):
         return self.packer.pack_transaction(self)
+
+    def as_email(self):
+        pass
 
 
 class Company:
