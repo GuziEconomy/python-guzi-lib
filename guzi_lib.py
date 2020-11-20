@@ -49,6 +49,10 @@ class FullBlockError(GuziError):
     pass
 
 
+class NotRemovableTransactionError(GuziError):
+    pass
+
+
 class Packer:
     def pack_transaction(self, transaction):
         return NotImplemented
@@ -114,15 +118,16 @@ class Signable(Packable):
 
 class Blockchain(list):
 
-    """
-    """
-    def __init__(self):
+    def __init__(self, pubkey):
+        self.pubkey = pubkey
         self.packer = BytePacker()
         self.cursor_block = 0
         self.cursor_tx = 0
         self.cursor_guzi = 0
 
     def __eq__(self, other):
+        if other is None:
+            return False
         if isinstance(other, Blockchain):
             if len(self) !=len(other):
                 return False
@@ -148,25 +153,27 @@ class Blockchain(list):
     def load_from_file(self, infile):
         hashed_blocks = umsgpack.unpack(infile)
         self._from_hashed_blocks(hashed_blocks)
-        # guzi_date, self.cursor_guzi = self[-1].guzi_index
-        # self.cursor_block = self.find_block_by_date(guzi_date)
-        # self.cursor_tx = self.cursor_block.find_transaction(TxType.GUZI_CREATE.value, guzi_date)
 
     def load_from_bytes(self, b):
         hashed_blocks = umsgpack.unpackb(b)
         self._from_hashed_blocks(hashed_blocks)
 
-    def find_block_by_date(self, date):
-        for index, block in reversed(list(enumerate(self))):
-            if block.close_date is not None and block.close_date.date() < date:
-                return self[index+1]
+    def _find_transaction(self, transaction):
+        for block in reversed(self):
+            if block._contain_transaction(transaction):
+                return block
+        return None
 
     def new_block(self):
         if len(self) > 0 and not self[-1].is_signed():
             raise UnsignedPreviousBlockError
         block = Block()
         if len(self) > 0:
-            block.previous_block_signature = self[-1].signature
+            previous_block = self[-1]
+            block.previous_block_signature = previous_block.signature
+            block.balance = previous_block.balance
+            block.total = previous_block.total
+
         super().append(block)
 
     def add_transaction_from_blockchain(self, blockchain):
@@ -192,9 +199,24 @@ class Blockchain(list):
         If transaction was already added, remove it from current block.
         If transaction was already sealed, raise Error
         """
-        pass
+        block_with_tx = self._find_transaction(transaction)
+        if block_with_tx is None:
+            pass
+        elif block_with_tx != self[-1]:
+            raise NotRemovableTransactionError
+        else:
+            if self[-1].is_signed():
+                raise NotRemovableTransactionError
+            self[-1]._remove_transaction(transaction)
+        return Transaction(VERSION, TxType.REFUSAL.value,
+                source=transaction.target_user,
+                amount=transaction.amount,
+                tx_date=datetime.now(tz=pytz.utc).timestamp(),
+                target_user=transaction.source,
+                detail=transaction.signature)
 
-    def is_valid(cls, blockchain):
+    @staticmethod
+    def is_valid(blockchain):
         """Return boolean
 
         True if given blockchain seems valid
@@ -203,12 +225,19 @@ class Blockchain(list):
         pass
 
     def sign_last_block(self, privkey):
+        self[-1].close_date = datetime.now(tz=pytz.utc)
         self[-1].sign(privkey)
 
     def _reduce(self, pubkey):
         for index, block in reversed(list(enumerate(self))):
             if block._containUser(pubkey):
                 return self[index:]
+
+    def _reduce_to_date(self, date):
+        for index, block in reversed(list(enumerate(self))):
+            if block.close_date is not None and block.close_date.date() < date:
+                return self[index+1:]
+        return self
 
     def _from_hashed_blocks(self, hashed_blocks):
         for b in hashed_blocks:
@@ -219,8 +248,8 @@ class Blockchain(list):
 
 class UserBlockchain(Blockchain):
 
-    def start(self, birthdate, new_pubkey, new_privkey, ref_pubkey):
-        self.append(BirthBlock(birthdate, new_pubkey, new_privkey))
+    def start(self, birthdate, my_privkey, ref_pubkey):
+        self.append(BirthBlock(birthdate, self.pubkey, my_privkey))
         init_block = Block(
                 previous_block_signature=self[0].signature,
                 signer=ref_pubkey,
@@ -228,20 +257,28 @@ class UserBlockchain(Blockchain):
         self.append(init_block)
 
     def validate(self, ref_privkey):
-        birth_block = self[0]
         init_block = self[1]
         init_block.close_date = datetime.now(tz=pytz.utc)
-        new_user_pub_key = birth_block.signer
-        init_block.add_transaction(GuziCreationTransaction(new_user_pub_key))
-        init_block.add_transaction(GuzaCreationTransaction(new_user_pub_key))
+        init_block.add_transaction(GuziCreationTransaction(self.pubkey))
+        init_block.add_transaction(GuzaCreationTransaction(self.pubkey))
         init_block.guzi_index = (init_block.close_date.isoformat(), 0)
         init_block.guza_index = (init_block.close_date.isoformat(), 0)
+        init_block.balance = 0
+        init_block.total = 0
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
 
-    def make_daily_guzis(self, date=None):
-        """ Return int number of guzis availables """
-        pass
+    def make_daily_guzis(self, d=None):
+        """ Return int number of guzis availables
+
+        A GuziCreationTransaction is done by a user to himself, creating his own
+        Guzis. This transaction only contains date, user id and the amount of
+        created guzis.
+        A user must create (total)^(1/3)+1 Guzis/day (rounded down)
+        """
+        amount = 1 + int(self[-1].total**(1/3))
+        guzis = [([date.today().isoformat()], list(range(amount)))]
+        self.add_transaction(Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=datetime.now(tz=pytz.utc).timestamp(), guzis_positions=guzis))
 
     def make_daily_guzas(self, date=None):
         """ Return int number of guzas availables """
@@ -337,7 +374,7 @@ class Block(Signable):
         return self.__str__()
 
     def __eq__(self, other):
-        return isinstance(other, Block) and self.pack() == other.pack()
+        return other is not None and isinstance(other, Block) and self.pack() == other.pack()
 
     def add_transaction(self, tx):
         if self.is_signed():
@@ -434,8 +471,11 @@ class Block(Signable):
     def _hash_pair(self, hash0, hash1):
         return hashlib.sha256(hash0+hash1).digest()
 
-    def _containTx(self, transaction):
+    def _contain_transaction(self, transaction):
         return transaction in self.transactions
+
+    def _remove_transaction(self, transaction):
+        self.transactions.remove(transaction)
 
     def _containUser(self, pubkey):
         for t in self.transactions:
@@ -458,7 +498,7 @@ class BirthBlock(Block):
 class Transaction(Signable):
 
     def __init__(self, version, tx_type, source, amount, tx_date=None,
-            target_company="", target_user="", guzis_positions=[], detail="", signature=None):
+            target_company=None, target_user=None, guzis_positions=[], detail=None, signature=None):
         self.version = version
         self.tx_type = tx_type
         self.date = datetime.utcfromtimestamp(tx_date).replace(tzinfo=pytz.utc) if tx_date else tx_date
@@ -479,7 +519,8 @@ class Transaction(Signable):
         return self.__str__()
 
     def __eq__(self, other):
-        return (isinstance(other, Transaction) and
+        return (other is not None and
+                isinstance(other, Transaction) and
                 self.version == other.version and
                 self.tx_type == other.tx_type and
                 self.date == other.date and
@@ -542,17 +583,6 @@ class Company:
     def pay_order(self, my_privkey, target, amount):
         pass
 
-
-# TODO
-# Maybe those Transactions classes are dumb
-# In fact, the Blockchain should do it all :
-# class Blockchain:
-# (...)
-#   def make_daily_guzis(self, date=None):
-#   def make_daily_guzas(self, date=None):
-#   def pay(self, target, amount, target_is_a_company=True):
-#   def engage_guzis(self, target, length, daily_amount, target_is_a_company=True):
-#   def engage_guzas(self, target, length, daily_amount):
 
 class GuziCreationTransaction(Transaction):
 
