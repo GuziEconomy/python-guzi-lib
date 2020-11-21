@@ -39,17 +39,13 @@ class TxType(Enum):
 class GuziError(Exception):
     """ Base class for Guzi exceptions """
     pass
-
-
 class UnsignedPreviousBlockError(GuziError):
     pass
-
-
 class FullBlockError(GuziError):
     pass
-
-
 class NotRemovableTransactionError(GuziError):
+    pass
+class InvalidBlockchainError(GuziError):
     pass
 
 
@@ -268,7 +264,17 @@ class UserBlockchain(Blockchain):
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
 
-    def make_daily_guzis(self, d=None):
+    def _get_guzis_amount(self):
+        n = self[-1].total
+        if n < 0:
+            raise InvalidBlockchainError("Total can never be negative")
+        floatroot = (n ** (1.0 / 3.0))
+        introot = int(round(floatroot))
+        if introot*introot*introot == n:
+            return introot + 1
+        return introot
+
+    def make_daily_guzis(self, dt=None):
         """ Return int number of guzis availables
 
         A GuziCreationTransaction is done by a user to himself, creating his own
@@ -276,13 +282,27 @@ class UserBlockchain(Blockchain):
         created guzis.
         A user must create (total)^(1/3)+1 Guzis/day (rounded down)
         """
-        amount = 1 + int(self[-1].total**(1/3))
-        guzis = [([date.today().isoformat()], list(range(amount)))]
-        self.add_transaction(Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=datetime.now(tz=pytz.utc).timestamp(), guzis_positions=guzis))
+        amount = self._get_guzis_amount()
+        if dt is None:
+            dt = datetime.now(tz=pytz.utc)
+        guzis = [([dt.date().isoformat()], list(range(amount)))]
+        self.add_transaction(Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=dt.timestamp(), guzis_positions=guzis))
+        return self[-1].transactions[-1]
 
-    def make_daily_guzas(self, date=None):
-        """ Return int number of guzas availables """
-        pass
+    def make_daily_guzas(self, dt=None):
+        """ Return int number of guzas availables
+
+        A GuzaCreationTransaction is done by a user to himself, creating his own
+        Guzas. This transaction only contains date, user id and the amount of
+        created guzas.
+        A user must create (total)^(1/3)+1 Guzas/day (rounded down)
+        """
+        amount = self._get_guzis_amount()
+        if dt is None:
+            dt = datetime.now(tz=pytz.utc)
+        guzas = [([dt.date().isoformat()], list(range(amount)))]
+        self.add_transaction(Transaction(VERSION, TxType.GUZA_CREATE.value, self.pubkey, amount, tx_date=dt.timestamp(), guzis_positions=guzas))
+        return self[-1].transactions[-1]
 
     def pay_to_user(self, target, amount):
         pass

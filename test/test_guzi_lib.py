@@ -552,6 +552,123 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         # Assert
         self.assertEqual(tx.guzis_positions, [([date.today().isoformat()], [0])])
 
+    def test_should_create_6_guzi_if_total_is_125(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+        blockchain[-1].total = 125
+
+        # Act
+        tx = blockchain.make_daily_guzis()
+
+        # Assert
+        self.assertEqual(tx.guzis_positions, [([date.today().isoformat()], list(range(6)))])
+
+    def test_should_use_given_date(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+        dt = datetime(2001, 3, 22, 0, 0, 0, tzinfo=pytz.utc)
+
+        # Act
+        tx = blockchain.make_daily_guzis(dt)
+
+        # Assert
+        self.assertEqual(tx.guzis_positions, [([dt.date().isoformat()], [0])])
+
+
+class TestBlockchainMakeDailyGuzas(unittest.TestCase):
+
+    def test_should_create_GUZA_CREATE_transaction(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+
+        # Act
+        blockchain.make_daily_guzas()
+        tx = blockchain[-1].transactions[0]
+
+        # Assert
+        self.assertEqual(tx.tx_type, TxType.GUZA_CREATE.value)
+
+    def test_should_create_1_guza_if_total_is_0(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+
+        # Act
+        blockchain.make_daily_guzas()
+        tx = blockchain[-1].transactions[0]
+
+        # Assert
+        self.assertEqual(tx.guzis_positions, [([date.today().isoformat()], [0])])
+
+    def test_should_create_6_guza_if_total_is_125(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+        blockchain[-1].total = 125
+
+        # Act
+        tx = blockchain.make_daily_guzas()
+
+        # Assert
+        self.assertEqual(tx.guzis_positions, [([date.today().isoformat()], list(range(6)))])
+
+    def test_should_use_given_date(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+        dt = datetime(2001, 3, 22, 0, 0, 0, tzinfo=pytz.utc)
+
+        # Act
+        tx = blockchain.make_daily_guzas(dt)
+
+        # Assert
+        self.assertEqual(tx.guzis_positions, [([dt.date().isoformat()], [0])])
+
+
+class TestBlockchainGetGuzisAmount(unittest.TestCase):
+
+    def test_should_return_0_for_total_0(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+        blockchain[-1].total = 0
+
+        # Act
+        result = blockchain._get_guzis_amount()
+
+        # Assert
+        self.assertEqual(result, 1)
+
+    def test_should_raise_error_for_negative_total(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        blockchain.validate(REF_PRIV_KEY)
+        blockchain.new_block()
+        blockchain[-1].total = -125
+
+        # Act
+        # Assert
+        with self.assertRaises(InvalidBlockchainError):
+            blockchain._get_guzis_amount()
+
 
 class TestBlockchainFindTransaction(unittest.TestCase):
 
