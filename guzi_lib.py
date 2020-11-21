@@ -169,6 +169,9 @@ class Blockchain(list):
             block.previous_block_signature = previous_block.signature
             block.balance = previous_block.balance
             block.total = previous_block.total
+        else:
+            block.balance = 0
+            block.total = 0
 
         super().insert(0, block)
 
@@ -246,6 +249,7 @@ class Blockchain(list):
 class UserBlockchain(Blockchain):
 
     def start(self, birthdate, my_privkey, ref_pubkey):
+        self.clear()
         self.insert(0, BirthBlock(birthdate, self.pubkey, my_privkey))
         init_block = Block(
                 previous_block_signature=self[0].signature,

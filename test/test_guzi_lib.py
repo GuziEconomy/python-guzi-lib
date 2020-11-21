@@ -138,6 +138,15 @@ class TestUserBlockchainStart(unittest.TestCase):
         self.assertEqual(init_block.engagements, [])
         self.assertIsNone(init_block.signature)
 
+    def test_should_empty_previous_blockchain(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+
+        self.assertEqual(len(blockchain), 2)
+
 
 class TestUserBlockchainValidate(unittest.TestCase):
 
