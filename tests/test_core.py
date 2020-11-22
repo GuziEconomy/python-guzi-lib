@@ -6,9 +6,9 @@ import random
 
 from io import BytesIO
 from freezegun import freeze_time
-import datetime
+from datetime import datetime, date
 
-from guzi_lib import *
+from guzilib.core import *
 
 KEY_POOL = [
     {'priv': bytes.fromhex('cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6'),
@@ -199,7 +199,87 @@ class TestUserBlockchainValidate(unittest.TestCase):
         self.assertEqual(init_block.merkle_root, expected_merkle_root)
         self.assertEqual(len(init_block.transactions), 2)
         self.assertTrue(vk.verify(init_block.signature, expected_data))
-        
+
+
+class TestUserBlockchainPayToUser(unittest.TestCase):
+
+    def test_should_create_payment_transaction(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
+
+        self.assertEqual(result.tx_type, TxType.PAYMENT.value)
+
+    def test_should_set_correct_amount(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+        blockchain.make_daily_guzis()
+
+        result = blockchain.pay_to_user(REF_PUB_KEY, 2)
+
+        self.assertEqual(result.amount, 2)
+
+    @freeze_time("2011-12-13 12:34:56")
+    def test_should_set_correct_date(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
+
+        self.assertEqual(result.date, datetime(2011,12,13,12,34,56,tzinfo=pytz.utc))
+
+    def test_should_set_correct_source(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
+
+        self.assertEqual(result.source, NEW_USER_PUB_KEY)
+
+    def test_should_set_correct_target(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
+
+        self.assertEqual(result.target_user, REF_PUB_KEY)
+
+    def test_should_set_correct_guzis(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+        blockchain.make_daily_guzis()
+
+        expected = blockchain._get_available_guzis(2)
+        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
+
+        self.assertEqual(result.guzis_positions, expected)
+
+    def test_should_add_the_transaction_to_blockchain(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        blockchain.pay_to_user(REF_PUB_KEY, 1)
+
+        self.assertEqual(len(blockchain[0].transactions), 2)
+
+    def test_should_remove_used_guzis_from_availables(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain.make_daily_guzis()
+
+        blockchain.pay_to_user(REF_PUB_KEY, 1)
+        guzis = blockchain._get_available_guzis()
+
+        self.assertEqual(guzis, [])
+
 
 class TestBlockchainEq(unittest.TestCase):
 
@@ -520,7 +600,6 @@ class TestBlockchainGetAvailableGuzis(unittest.TestCase):
     @freeze_time("2011-12-13 12:34:56")
     def test_base_case(self):
         # Arrange
-        birthdate = datetime(1998, 12, 21,0,0,0,0, tzinfo=pytz.utc).timestamp()
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
         blockchain[0].total = 4**3
@@ -530,7 +609,67 @@ class TestBlockchainGetAvailableGuzis(unittest.TestCase):
         result = blockchain._get_available_guzis()
 
         # Assert
-        self.assertEqual([[["2011-12-13"], [0, 1, 2, 3, 4]]], result)
+        self.assertEqual([["2011-12-13", [0, 1, 2, 3, 4]]], result)
+
+    @freeze_time("2011-12-13 12:34:56", auto_tick_seconds=60*60*24)
+    def test_should_return_all_dates(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain[0].total = 4**3
+        blockchain.make_daily_guzis()
+        blockchain.make_daily_guzis()
+        blockchain.make_daily_guzis()
+
+        # Act
+        result = blockchain._get_available_guzis()
+        expected = [
+            ["2011-12-15", [0, 1, 2, 3, 4]],
+            ["2011-12-14", [0, 1, 2, 3, 4]],
+            ["2011-12-13", [0, 1, 2, 3, 4]]
+        ]
+
+        # Assert
+        self.assertEqual(expected, result)
+
+    @freeze_time("2011-12-13 12:34:56", auto_tick_seconds=60*60*24)
+    def test_should_return_evolving_total(self):
+        # Arrange
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain[0].total = 4**3
+        blockchain.make_daily_guzis()
+        blockchain[0].total = 5**3
+        blockchain.make_daily_guzis()
+        blockchain[0].total = 6**3
+        blockchain.make_daily_guzis()
+
+        # Act
+        result = blockchain._get_available_guzis()
+        expected = [
+            ["2011-12-15", [0, 1, 2, 3, 4, 5, 6]],
+            ["2011-12-14", [0, 1, 2, 3, 4, 5]],
+            ["2011-12-13", [0, 1, 2, 3, 4]]
+        ]
+
+        # Assert
+        self.assertEqual(expected, result)
+
+class TestUserBlockchainSpendGuzisFromAvailables(unittest.TestCase):
+
+    @freeze_time("2011-12-13 12:34:56", auto_tick_seconds=60*60*24)
+    def test_should_remove_older_guzis(self):
+        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        blockchain.new_block()
+        blockchain[0].total = 4**3
+        blockchain.make_daily_guzis()
+
+        blockchain._spend_guzis_from_availables(blockchain._get_available_guzis(), 2)
+        expected = [
+            ["2011-12-13", [0, 1, 2]],
+        ]
+
+        self.assertEqual(expected, blockchain._get_available_guzis())
 
 
 class TestBlockchainMakeDailyGuzis(unittest.TestCase):
@@ -561,7 +700,7 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         tx = blockchain[0].transactions[0]
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], [0]]])
+        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), [0]]])
 
     def test_should_create_6_guzi_if_total_is_125(self):
         # Arrange
@@ -575,7 +714,7 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         tx = blockchain.make_daily_guzis()
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], list(range(6))]])
+        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), list(range(6))]])
 
     def test_should_use_given_date(self):
         # Arrange
@@ -589,7 +728,7 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         tx = blockchain.make_daily_guzis(dt)
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[[dt.date().isoformat()], [0]]])
+        self.assertEqual(tx.guzis_positions, [[dt.date().isoformat(), [0]]])
 
 
 class TestBlockchainMakeDailyGuzas(unittest.TestCase):
@@ -620,7 +759,7 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         tx = blockchain[0].transactions[0]
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], [0]]])
+        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), [0]]])
 
     def test_should_create_6_guza_if_total_is_125(self):
         # Arrange
@@ -634,7 +773,7 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         tx = blockchain.make_daily_guzas()
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], list(range(6))]])
+        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), list(range(6))]])
 
     def test_should_use_given_date(self):
         # Arrange
@@ -648,7 +787,7 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         tx = blockchain.make_daily_guzas(dt)
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[[dt.date().isoformat()], [0]]])
+        self.assertEqual(tx.guzis_positions, [[dt.date().isoformat(), [0]]])
 
 
 class TestBlockchainGetGuzisAmount(unittest.TestCase):

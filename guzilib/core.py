@@ -2,7 +2,7 @@ import hashlib
 import ecdsa
 import pytz
 import umsgpack
-from datetime import datetime, date
+from datetime import datetime, date, time
 from enum import Enum
 
 
@@ -117,9 +117,8 @@ class Blockchain(list):
     def __init__(self, pubkey):
         self.pubkey = pubkey
         self.packer = BytePacker()
-        self.cursor_block = 0
-        self.cursor_tx = 0
-        self.cursor_guzi = 0
+        self.last_spend_date = None
+        self.last_spend_guzi = None
 
     def __eq__(self, other):
         if other is None:
@@ -290,15 +289,17 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         if dt is None:
             dt = datetime.now(tz=pytz.utc)
-        guzis = [[[dt.date().isoformat()], list(range(amount))]]
+        guzis = [[dt.date().isoformat(), list(range(amount))]]
         self.add_transaction(Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=dt.timestamp(), guzis_positions=guzis))
+        if self.last_spend_date is None:
+            self.last_spend_date = dt.date()
         return self[0].transactions[0]
 
     def make_daily_guzas(self, dt=None):
         # TODO : check age > 18
         """ Return int number of guzas availables
 
-        A GuzaCreationTransaction is done by a user to himself, creating his own
+        A Guza Creation Transaction is done by a user to himself, creating his own
         Guzas. This transaction only contains date, user id and the amount of
         created guzas.
         A user must create (total)^(1/3)+1 Guzas/day (rounded down)
@@ -306,12 +307,28 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         if dt is None:
             dt = datetime.now(tz=pytz.utc)
-        guzas = [[[dt.date().isoformat()], list(range(amount))]]
+        guzas = [[dt.date().isoformat(), list(range(amount))]]
         self.add_transaction(Transaction(VERSION, TxType.GUZA_CREATE.value, self.pubkey, amount, tx_date=dt.timestamp(), guzis_positions=guzas))
         return self[0].transactions[0]
 
     def pay_to_user(self, target, amount):
-        pass
+        """Return Transaction to pay given target with amount Guzis
+
+        Also add this Transaction to itself
+        """
+        guzis_positions = self._get_available_guzis(amount)
+        tx = Transaction(
+            VERSION,
+            TxType.PAYMENT.value,
+            self.pubkey,
+            amount,
+            tx_date=datetime.now(tz=pytz.utc).timestamp(),
+            target_user=target,
+            guzis_positions=guzis_positions
+        )
+        self._spend_guzis_from_availables(guzis_positions, amount)
+        self.add_transaction(tx)
+        return tx
 
     def pay_to_company(self, target, amount):
         pass
@@ -328,17 +345,28 @@ class UserBlockchain(Blockchain):
     def _get_available_guzis(self, amount=-1):
         """Return amount number of first available Guzis
 
-        If amount=-1, return allavailable guzis
+        If amount=-1, return all available guzis
         """
         result = []
-        tx_index = self.cursor_tx
-        for b in self[self.cursor_block:]:
-            for tx in b.transactions[tx_index:]:
-                if tx.tx_type == TxType.GUZI_CREATE.value:
-                    result.append([[tx.date.date().isoformat()], list(range(self.cursor_guzi, tx.amount))])
-            tx_index = 0
-
+        for b in self:
+            result += b._get_available_guzis(self.last_spend_date, self.last_spend_guzi)
         return result
+
+    def _spend_guzis_from_availables(self, available_guzis, amount):
+        """Update last_spend_guzi and last_spend_date
+
+        depending on given available_guzis
+        """
+        to_spend = amount
+        for row in reversed(available_guzis):
+            if len(row[1]) > to_spend:
+                self.last_spend_guzi = row[1][-1*to_spend]
+                to_spend = 0
+            else:
+                to_spend -= len(row[1])
+                self.last_spend_guzi = 0
+            if to_spend == 0:
+                self.last_spend_date = date.fromisoformat(row[0])
 
 
 class CompanyBlockchain(Blockchain):
@@ -499,6 +527,17 @@ class Block(Signable):
                 return True
         return False
 
+    def _get_available_guzis(self, last_spend_date, last_spend_guzi):
+        result = []
+        for tx in self.transactions:
+            if tx.date.date() >= last_spend_date and tx.tx_type == TxType.GUZI_CREATE.value:
+                result += tx.guzis_positions
+                if tx.date.date() == last_spend_date:
+                    result[-1][1] = result[-1][1][:last_spend_guzi]
+                    if len(result[-1][1]) == 0:
+                        result.pop()
+        return result
+
 
 class BirthBlock(Block):
 
@@ -623,7 +662,7 @@ class PaymentTransaction(Transaction):
 
     def get_guzi_positions(self, current_block, amount):
         i = current_block.guzi_index
-        return [([str(tx_date.year)+str(tx_date.month)+str(tx_date.day)],list(range(amount)))]
+        return [(tx_date.isoformat(),list(range(amount)))]
 
 
 class GuziEngagementTransaction(Transaction):
