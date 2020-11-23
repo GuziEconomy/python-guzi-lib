@@ -1252,3 +1252,35 @@ class TestTransactionSign(unittest.TestCase):
         # Assert
         self.assertTrue(vk.verify(tx.signature, data))
 
+
+
+from hypothesis.stateful import RuleBasedStateMachine, rule, invariant, initialize
+from hypothesis import note, strategies as st
+
+class UserBlockchainStateMachine(RuleBasedStateMachine):
+
+    guzis = 0
+    bc = None
+    
+    @initialize(birthdate=st.datetimes(),
+            my_key_pair=st.sampled_from(KEY_POOL),
+            ref_key_pair=st.sampled_from(KEY_POOL))
+    def init_blockchain(self, birthdate, my_key_pair, ref_key_pair):
+        self.bc = UserBlockchain(my_key_pair['pub'])
+        self.bc.start(birthdate.timestamp(), my_key_pair['priv'], ref_key_pair['pub'])
+        self.bc.validate(ref_key_pair['priv'])
+        self.guzis = 1
+        self.bc.new_block()
+
+    @rule()
+    def create_guzis(self):
+        self.guzis += self.bc._get_guzis_amount()
+        self.bc.make_daily_guzis()
+
+    @invariant()
+    def check_guzis(self):
+        if self.bc is not None:
+            assert self.guzis == self.bc._get_guzis_amount()
+
+
+UserBlockchainTests = UserBlockchainStateMachine.TestCase

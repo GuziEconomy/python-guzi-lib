@@ -33,6 +33,7 @@ u-msgpack-python = "==2.7.1"
 wcwidth = "==0.2.5"
 zipp = "==3.4.0"
 Pygments = "==2.7.1"
+hypothesis = "*"
 
 [dev-packages]
 
