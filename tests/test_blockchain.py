@@ -8,7 +8,7 @@ from io import BytesIO
 from freezegun import freeze_time
 from datetime import datetime, date
 
-from guzilib.core import *
+from guzilib.blockchain import *
 
 KEY_POOL = [
     {'priv': bytes.fromhex('cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6'),
@@ -1251,3 +1251,4 @@ class TestTransactionSign(unittest.TestCase):
 
         # Assert
         self.assertTrue(vk.verify(tx.signature, data))
+
