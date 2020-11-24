@@ -1,7 +1,8 @@
+.PHONY: init test
+
 init:
-    pipenv install
+	pipenv install
 
 test:
-    pipenv run pytest
+	pipenv run pytest
 
-.PHONY: init test

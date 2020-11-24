@@ -1,6 +1,6 @@
 from guzilib.utils import *
 import pytz
-from datetime import datetime, date, time
+from datetime import date
 
 class Blockchain(list):
 
@@ -99,12 +99,11 @@ class Blockchain(list):
         return Transaction(VERSION, TxType.REFUSAL.value,
                 source=transaction.target_user,
                 amount=transaction.amount,
-                tx_date=datetime.now(tz=pytz.utc).timestamp(),
+                tx_date=date.today().isoformat(),
                 target_user=transaction.source,
                 detail=transaction.signature)
 
-    @staticmethod
-    def is_valid(blockchain):
+    def is_valid(self):
         """Return boolean
 
         True if given blockchain seems valid
@@ -113,7 +112,7 @@ class Blockchain(list):
         pass
 
     def sign_last_block(self, privkey):
-        self[0].close_date = datetime.now(tz=pytz.utc)
+        self[0].close_date = date.today()
         self[0].sign(privkey)
 
     def _reduce(self, pubkey):
@@ -124,7 +123,7 @@ class Blockchain(list):
 
     def _reduce_to_date(self, date):
         for index, block in list(enumerate(self)):
-            if block.close_date is not None and block.close_date.date() < date:
+            if block.close_date is not None and block.close_date < date:
                 return self[:index]
         return self
 
@@ -133,6 +132,18 @@ class Blockchain(list):
             block_as_list = umsgpack.unpackb(b)
             block = Block(*block_as_list)
             self.append(block)
+
+    def _contain_transaction(self, tx):
+        """Return True if transaction already in the blockchain
+
+        :tx: TODO
+        :returns: TODO
+
+        """
+        for b in self:
+            if b._contain_transaction(tx):
+                return True
+        return False
 
 
 class UserBlockchain(Blockchain):
@@ -146,15 +157,15 @@ class UserBlockchain(Blockchain):
                 merkle_root=EMPTY_HASH)
         self.insert(0, init_block)
 
-    def validate(self, ref_privkey):
+    def validate(self, ref_privkey, dt=None):
         init_block = self[0]
         init_block.balance = 0
         init_block.total = 0
-        init_block.close_date = datetime.now(tz=pytz.utc)
+        init_block.close_date = date.today()
         init_block.guzi_index = (init_block.close_date.isoformat(), 0)
         init_block.guza_index = (init_block.close_date.isoformat(), 0)
-        self.make_daily_guzis()
-        self.make_daily_guzas()
+        self.make_daily_guzis(dt)
+        self.make_daily_guzas(dt)
         init_block.compute_merkle_root()
         init_block.sign(ref_privkey)
 
@@ -178,11 +189,14 @@ class UserBlockchain(Blockchain):
         """
         amount = self._get_guzis_amount()
         if dt is None:
-            dt = datetime.now(tz=pytz.utc)
-        guzis = [[dt.date().isoformat(), list(range(amount))]]
-        self.add_transaction(Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=dt.timestamp(), guzis_positions=guzis))
+            dt = date.today()
+        guzis = [[dt.isoformat(), list(range(amount))]]
+        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
+        if self._contain_transaction(tx):
+            return
+        self.add_transaction(tx)
         if self.last_spend_date is None:
-            self.last_spend_date = dt.date()
+            self.last_spend_date = dt
         return self[0].transactions[0]
 
     def make_daily_guzas(self, dt=None):
@@ -196,9 +210,9 @@ class UserBlockchain(Blockchain):
         """
         amount = self._get_guzis_amount()
         if dt is None:
-            dt = datetime.now(tz=pytz.utc)
-        guzas = [[dt.date().isoformat(), list(range(amount))]]
-        self.add_transaction(Transaction(VERSION, TxType.GUZA_CREATE.value, self.pubkey, amount, tx_date=dt.timestamp(), guzis_positions=guzas))
+            dt = date.today()
+        guzas = [[dt.isoformat(), list(range(amount))]]
+        self.add_transaction(Transaction(VERSION, TxType.GUZA_CREATE.value, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
         return self[0].transactions[0]
 
     def pay_to_user(self, target, amount):
@@ -212,7 +226,7 @@ class UserBlockchain(Blockchain):
             TxType.PAYMENT.value,
             self.pubkey,
             amount,
-            tx_date=datetime.now(tz=pytz.utc).timestamp(),
+            tx_date=date.today().isoformat(),
             target_user=target,
             guzis_positions=guzis_positions
         )
@@ -240,6 +254,17 @@ class UserBlockchain(Blockchain):
         result = []
         for b in self:
             result += b._get_available_guzis(self.last_spend_date, self.last_spend_guzi)
+        return result
+
+    def _get_available_guzis_amount(self):
+        """Return the total number of Guzis spendable
+        :returns: TODO
+
+        """
+        result = 0
+        available_guzis = self._get_available_guzis()
+        for ag in available_guzis:
+            result += len(ag[1])
         return result
 
     def _spend_guzis_from_availables(self, available_guzis, amount):
@@ -294,7 +319,7 @@ class Block(Signable):
             signer=None, guzi_index=None, guza_index=None, balance=None, total=None,
             b_transactions=None, b_engagements=None, signature=None):
         self.version = version
-        self.close_date = datetime.utcfromtimestamp(close_date).replace(tzinfo=pytz.utc) if close_date else None
+        self.close_date = date.fromisoformat(close_date) if close_date else None
         self.previous_block_signature = previous_block_signature
         self.merkle_root = merkle_root
         self.signer = signer
@@ -338,14 +363,14 @@ class Block(Signable):
         If no transaction is found, return None
         """
         for t in self.transactions:
-            if tx_type == t.tx_type and date == t.date.date():
+            if tx_type == t.tx_type and date == t.date:
                 return t
         return None
 
     def as_list(self):
         return [
             self.version,
-            self.close_date.timestamp() if self.close_date else 0,
+            self.close_date.isoformat() if self.close_date else 0,
             self.previous_block_signature,
             self.merkle_root,
             self.signer,
@@ -420,9 +445,9 @@ class Block(Signable):
     def _get_available_guzis(self, last_spend_date, last_spend_guzi):
         result = []
         for tx in self.transactions:
-            if tx.date.date() >= last_spend_date and tx.tx_type == TxType.GUZI_CREATE.value:
+            if tx.date >= last_spend_date and tx.tx_type == TxType.GUZI_CREATE.value:
                 result += tx.guzis_positions
-                if tx.date.date() == last_spend_date:
+                if tx.date == last_spend_date:
                     result[-1][1] = result[-1][1][:last_spend_guzi]
                     if len(result[-1][1]) == 0:
                         result.pop()
@@ -446,7 +471,7 @@ class Transaction(Signable):
             target_company=None, target_user=None, guzis_positions=[], detail=None, signature=None):
         self.version = version
         self.tx_type = tx_type
-        self.date = datetime.utcfromtimestamp(tx_date).replace(tzinfo=pytz.utc) if tx_date else datetime.now()
+        self.date = date.fromisoformat(tx_date) if tx_date else date.today()
         self.source = source
         self.amount = int(amount)
         self.target_company = target_company
@@ -483,7 +508,7 @@ class Transaction(Signable):
             self.tx_type,
             self.source,
             self.amount,
-            self.date.timestamp(),
+            self.date.isoformat(),
             self.target_company,
             self.target_user,
             self.guzis_positions,
@@ -512,14 +537,14 @@ class PaymentTransaction(Transaction):
     to a company ; or from a company to another one.
     """
     def __init__(self, last_block, source, target, amount, is_company_target=False, detail=None):
-        tx_date = datetime.now(tz=pytz.utc)
+        tx_date = date.today()
         target_company = target if is_company_target is not None else None
         target_user = target if is_company_target is None else None
         guzis_positions = self.get_guzi_positions(last_block, amount)
 
         super().__init__(
                 VERSION, TxType.PAYMENT.value, source, amount,
-                tx_date=tx_date.timestamp() ,
+                tx_date=tx_date.isoformat() ,
                 target_company=target_company,
                 target_user=target_user,
                 guzis_positions=guzis_positions,
