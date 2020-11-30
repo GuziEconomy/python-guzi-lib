@@ -188,9 +188,8 @@ class UserBlockchain(Blockchain):
         A user must create (total)^(1/3)+1 Guzis/day (rounded down)
         """
         amount = self._get_guzis_amount()
-        if dt is None:
-            dt = date.today()
-        guzis = [[dt.isoformat(), list(range(amount))]]
+        dt = dt or date.today()
+        guzis = [[[dt.isoformat()], list(range(amount))]]
         tx = Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
         if self._contain_transaction(tx):
             return
@@ -209,9 +208,8 @@ class UserBlockchain(Blockchain):
         A user must create (total)^(1/3)+1 Guzas/day (rounded down)
         """
         amount = self._get_guzis_amount()
-        if dt is None:
-            dt = date.today()
-        guzas = [[dt.isoformat(), list(range(amount))]]
+        dt = dt or date.today()
+        guzas = [[[dt.isoformat()], list(range(amount))]]
         self.add_transaction(Transaction(VERSION, TxType.GUZA_CREATE.value, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
         return self[0].transactions[0]
 
@@ -220,7 +218,11 @@ class UserBlockchain(Blockchain):
 
         Also add this Transaction to itself
         """
-        guzis_positions = self._get_available_guzis(amount)
+        if amount < 0:
+            raise NegativeAmountError
+        if amount > self._get_available_guzis_amount():
+            raise InsufficientFundsError
+        guzis_positions = self._get_available_guzis()
         tx = Transaction(
             VERSION,
             TxType.PAYMENT.value,
@@ -246,42 +248,39 @@ class UserBlockchain(Blockchain):
     def engage_guzas(self, target, days, daily_amount):
         pass
 
-    def _get_available_guzis(self, amount=-1):
+    def _get_available_guzis(self):
         """Return amount number of first available Guzis
 
         If amount=-1, return all available guzis
         """
-        result = []
-        for b in self:
-            result += b._get_available_guzis(self.last_spend_date, self.last_spend_guzi)
-        return result
+        guzis = []
+        for block in self:
+            guzis += block._guzis()
+
+        guzis = unzip_positions(guzis)
+        if self.last_spend_date is not None and self.last_spend_guzi is not None:
+            for i, g in list(enumerate(guzis)):
+                if date.fromisoformat(g[0]) == self.last_spend_date and g[1] == self.last_spend_guzi:
+                    return guzis[i+1:]
+        return guzis
+
 
     def _get_available_guzis_amount(self):
         """Return the total number of Guzis spendable
         :returns: TODO
 
         """
-        result = 0
-        available_guzis = self._get_available_guzis()
-        for ag in available_guzis:
-            result += len(ag[1])
-        return result
+        return len(self._get_available_guzis())
 
     def _spend_guzis_from_availables(self, available_guzis, amount):
         """Update last_spend_guzi and last_spend_date
 
         depending on given available_guzis
         """
-        to_spend = amount
-        for row in reversed(available_guzis):
-            if len(row[1]) > to_spend:
-                self.last_spend_guzi = row[1][-1*to_spend]
-                to_spend = 0
-            else:
-                to_spend -= len(row[1])
-                self.last_spend_guzi = 0
-            if to_spend == 0:
-                self.last_spend_date = date.fromisoformat(row[0])
+        if amount == 0:
+            return
+        self.last_spend_date = date.fromisoformat(available_guzis[amount-1][0])
+        self.last_spend_guzi = available_guzis[amount-1][1]
 
 
 class CompanyBlockchain(Blockchain):
@@ -442,15 +441,10 @@ class Block(Signable):
                 return True
         return False
 
-    def _get_available_guzis(self, last_spend_date, last_spend_guzi):
+    def _guzis(self):
         result = []
         for tx in self.transactions:
-            if tx.date >= last_spend_date and tx.tx_type == TxType.GUZI_CREATE.value:
-                result += tx.guzis_positions
-                if tx.date == last_spend_date:
-                    result[-1][1] = result[-1][1][:last_spend_guzi]
-                    if len(result[-1][1]) == 0:
-                        result.pop()
+            result += tx._guzis()
         return result
 
 
@@ -529,61 +523,7 @@ class Transaction(Signable):
     def as_email(self):
         pass
 
-
-class PaymentTransaction(Transaction):
-
-    """
-    This is the MAIN transaction. When a user spend guzis to another one or
-    to a company ; or from a company to another one.
-    """
-    def __init__(self, last_block, source, target, amount, is_company_target=False, detail=None):
-        tx_date = date.today()
-        target_company = target if is_company_target is not None else None
-        target_user = target if is_company_target is None else None
-        guzis_positions = self.get_guzi_positions(last_block, amount)
-
-        super().__init__(
-                VERSION, TxType.PAYMENT.value, source, amount,
-                tx_date=tx_date.isoformat() ,
-                target_company=target_company,
-                target_user=target_user,
-                guzis_positions=guzis_positions,
-                detail=detail
-                )
-
-    def get_guzi_positions(self, current_block, amount):
-        i = current_block.guzi_index
-        return [(tx_date.isoformat(),list(range(amount)))]
-
-
-class GuziEngagementTransaction(Transaction):
-
-    """
-    An Engagement is what we usually call in classical money systems a loan.
-    It's a contract sealed in the blockchain saying "I commit to pay X Guzis
-    each day during Y days for a total amount of Z=X*Y"
-    """
-    pass
-
-
-class GuzaEngagementTransaction(Transaction):
-
-    """
-    An Engagement is what we usually call in classical money systems a loan.
-    It's a contract sealed in the blockchain saying "I commit to pay X Guzas
-    each day during Y days for a total amount of Z=X*Y"
-    """
-    pass
-
-
-class RefusedTransaction(Transaction):
-
-    """
-    A user has 15 days to refuse a transaction, unless he adds it to his 
-    blockchain in which case he cannot refuse it anymore.
-    When Alice receives a payment transaction and refuses it, she neither adds
-    the payment transaction nor the refusing one to her blockchain. But the
-    sender of the payment transaction must add the refusing transaction as
-    proof that he can refund his account with refused guzis.
-    """
-    pass
+    def _guzis(self):
+        if self.tx_type == TxType.GUZI_CREATE.value:
+            return self.guzis_positions
+        return []

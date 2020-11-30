@@ -1,3 +1,5 @@
+from hypothesis.stateful import RuleBasedStateMachine, rule, invariant, initialize, precondition
+from hypothesis import note, strategies as st, given, assume
 import unittest
 import pytz
 import ecdsa
@@ -64,7 +66,7 @@ def make_blockchain():
 
 class TestUserBlockchainStart(unittest.TestCase):
 
-    def test_should_create_empty_block(self):
+    def test_create_empty_block(self):
         """
 
         When a user creates his account, he creates 2 blocks :
@@ -136,7 +138,7 @@ class TestUserBlockchainStart(unittest.TestCase):
         self.assertEqual(init_block.engagements, [])
         self.assertIsNone(init_block.signature)
 
-    def test_should_empty_previous_blockchain(self):
+    def test_empty_previous_blockchain(self):
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
         blockchain.make_daily_guzis()
@@ -149,7 +151,7 @@ class TestUserBlockchainStart(unittest.TestCase):
 class TestUserBlockchainValidate(unittest.TestCase):
 
     @freeze_time("2011-12-13")
-    def test_validate_should_fill_init_blocks(self):
+    def test_validate_fill_init_blocks(self):
         """
 
         When reference receive an empty init blocks (with birthday block and
@@ -201,121 +203,66 @@ class TestUserBlockchainValidate(unittest.TestCase):
 
 class TestUserBlockchainPayToUser(unittest.TestCase):
 
-    def test_should_create_payment_transaction(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
+    @freeze_time("2011-12-13", auto_tick_seconds=60*60*24)
+    def init(self, amount=2):
+        self.blockchain = UserBlockchain(NEW_USER_PUB_KEY)
+        self.blockchain.new_block()
+        self.blockchain.make_daily_guzis()
+        self.blockchain.make_daily_guzis()
 
-        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
+        return self.blockchain.pay_to_user(REF_PUB_KEY, amount)
 
-        self.assertEqual(result.tx_type, TxType.PAYMENT.value)
+    def test_transaction_is_correctly_created(self):
+        result = self.init()
+        expected_tx = Transaction(VERSION, TxType.PAYMENT.value, 
+                source=NEW_USER_PUB_KEY,
+                amount=2,
+                tx_date=date(2011,12,15).isoformat(), 
+                target_user=REF_PUB_KEY,
+                guzis_positions=[('2011-12-13', 0), ('2011-12-14', 0)])
+        
+        self.assertEqual(result, expected_tx)
+    
+    def test_transaction_is_added_to_blockchain(self):
+        self.init()
 
-    def test_should_set_correct_amount(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
-        blockchain.make_daily_guzis()
+        self.assertEqual(len(self.blockchain[0].transactions), 3)
 
-        result = blockchain.pay_to_user(REF_PUB_KEY, 2)
+    def test_guzis_have_been_spended(self):
+        self.init()
 
-        self.assertEqual(result.amount, 2)
+        self.assertEqual(self.blockchain._get_available_guzis(), [])
 
-    @freeze_time("2011-12-13")
-    def test_should_set_correct_date(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
+    def test_raise_error_for_negative_amount(self):
+        with self.assertRaises(NegativeAmountError):
+            self.init(-2)
 
-        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
-
-        self.assertEqual(result.date, date(2011,12,13))
-
-    def test_should_set_correct_source(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
-
-        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
-
-        self.assertEqual(result.source, NEW_USER_PUB_KEY)
-
-    def test_should_set_correct_target(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
-
-        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
-
-        self.assertEqual(result.target_user, REF_PUB_KEY)
-
-    def test_should_set_correct_guzis(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
-        blockchain.make_daily_guzis()
-
-        expected = blockchain._get_available_guzis(2)
-        result = blockchain.pay_to_user(REF_PUB_KEY, 1)
-
-        self.assertEqual(result.guzis_positions, expected)
-
-    def test_should_add_the_transaction_to_blockchain(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
-
-        blockchain.pay_to_user(REF_PUB_KEY, 1)
-
-        self.assertEqual(len(blockchain[0].transactions), 2)
-
-    def test_should_remove_used_guzis_from_availables(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain.make_daily_guzis()
-
-        blockchain.pay_to_user(REF_PUB_KEY, 1)
-        guzis = blockchain._get_available_guzis()
-
-        self.assertEqual(guzis, [])
+    def test_raise_error_for_to_big_amount(self):
+        with self.assertRaises(InsufficientFundsError):
+            self.init(3)
 
 
 class TestBlockchainEq(unittest.TestCase):
 
-    @freeze_time("2011-12-13")
-    def test_two_identic_basic_bc_are_equals(self):
-        # Arrange
-        birthdate = date(1998, 12, 21).isoformat()
-        bc1 = UserBlockchain(NEW_USER_PUB_KEY)
-        bc1.start(birthdate, NEW_USER_PRIV_KEY, REF_PUB_KEY)
+    @given(d=st.dates(), 
+            me=st.sampled_from(KEY_POOL),
+            ref=st.sampled_from(KEY_POOL))
+    def test_two_identic_basic_bc_are_equals(self, d, me, ref):
+        bc = UserBlockchain(me['pub'])
+        bc.start(d.isoformat(), me['priv'], ref['pub'])
 
-        # Assert
-        self.assertEqual(bc1, bc1)
-
-    @freeze_time("2011-12-13")
-    def test_different_birthdate(self):
-        # Arrange
-        birthdate1 = date(1998, 12, 21).isoformat()
-        bc1 = UserBlockchain(NEW_USER_PUB_KEY)
-        bc1.start(birthdate1, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        birthdate2 = date(1999, 11, 23).isoformat()
-        bc2 = UserBlockchain(NEW_USER_PUB_KEY)
-        bc2.start(birthdate2, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-
-        # Assert
-        self.assertNotEqual(bc1, bc2)
-        self.assertNotEqual(bc2, bc1)
+        self.assertEqual(bc, bc)
 
     @freeze_time("2011-12-13")
-    def test_different_keys(self):
-        # Arrange
-        birthdate1 = date(1998, 12, 21).isoformat()
-        bc1 = UserBlockchain(NEW_USER_PUB_KEY)
-        bc1.start(birthdate1, NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        birthdate2 = date(1999, 11, 23).isoformat()
-        bc2 = UserBlockchain(NEW_USER_PUB_KEY)
-        bc2.start(birthdate2, REF_PRIV_KEY, NEW_USER_PUB_KEY)
+    @given(d1=st.dates(), d2=st.dates(), 
+            u1=st.sampled_from(KEY_POOL),
+            u2=st.sampled_from(KEY_POOL))
+    def test_different_birthdate(self, d1, d2, u1, u2):
+        bc1 = UserBlockchain(u1['pub'])
+        bc1.start(d1.isoformat(), u1['priv'], u2['pub'])
+        bc2 = UserBlockchain(u2['pub'])
+        bc2.start(d2.isoformat(), u2['priv'], u1['pub'])
 
-        # Assert
         self.assertNotEqual(bc1, bc2)
         self.assertNotEqual(bc2, bc1)
 
@@ -323,7 +270,7 @@ class TestBlockchainEq(unittest.TestCase):
 class TestBlockchainSaveToFile(unittest.TestCase):
 
     @freeze_time("2011-12-13")
-    def test_all_blocks_should_be_in(self):
+    def test_all_blocks_be_in(self):
          
         # Arrange
         birthdate = date(1998, 12, 21).isoformat()
@@ -370,7 +317,7 @@ class TestBlockchainAddTransaction(unittest.TestCase):
 
 class TestBlockchainNewBlock(unittest.TestCase):
 
-    def test_should_raise_exception_if_last_block_not_signed(self):
+    def test_raise_exception_if_last_block_not_signed(self):
          
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
@@ -380,7 +327,7 @@ class TestBlockchainNewBlock(unittest.TestCase):
         with self.assertRaises(UnsignedPreviousBlockError):
             blockchain.new_block()
 
-    def test_should_set_previous_block_hash(self):
+    def test_set_previous_block_hash(self):
          
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
@@ -396,7 +343,7 @@ class TestBlockchainNewBlock(unittest.TestCase):
 
 class TestBlockchainReduce(unittest.TestCase):
 
-    def test_should_return_total_blockchain_at_first_contact(self):
+    def test_return_total_blockchain_at_first_contact(self):
         
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
@@ -417,7 +364,7 @@ class TestBlockchainReduce(unittest.TestCase):
         # Assert
         self.assertEqual(len(result), len(blockchain))
 
-    def test_should_return_part_of_blockchain_at_second_contact(self):
+    def test_return_part_of_blockchain_at_second_contact(self):
         
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
@@ -442,7 +389,7 @@ class TestBlockchainReduce(unittest.TestCase):
 class TestBlockchainReduceToDate(unittest.TestCase):
 
     @freeze_time("2011-12-13", tick=True)
-    def test_should_return_total_blockchain_for_old_date(self):
+    def test_return_total_blockchain_for_old_date(self):
         
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
@@ -463,7 +410,7 @@ class TestBlockchainReduceToDate(unittest.TestCase):
         # Assert
         self.assertEqual(len(result), len(blockchain))
 
-    def test_should_return_only_block_after_date(self):
+    def test_return_only_block_after_date(self):
         
         # Arrange
         blockchain = make_blockchain()
@@ -474,7 +421,7 @@ class TestBlockchainReduceToDate(unittest.TestCase):
         # Assert
         self.assertEqual(len(result), 3)
 
-    def test_should_return_last_block_for_later_date(self):
+    def test_return_last_block_for_later_date(self):
         
         # Arrange
         blockchain = make_blockchain()
@@ -607,10 +554,17 @@ class TestBlockchainGetAvailableGuzis(unittest.TestCase):
         result = blockchain._get_available_guzis()
 
         # Assert
-        self.assertEqual([["2011-12-13", [0, 1, 2, 3, 4]]], result)
+        expected = [
+            ('2011-12-13', 0),
+            ('2011-12-13', 1),
+            ('2011-12-13', 2),
+            ('2011-12-13', 3),
+            ('2011-12-13', 4),
+        ]
+        self.assertEqual(expected, result)
 
     @freeze_time("2011-12-13", auto_tick_seconds=60*60*24)
-    def test_should_return_all_dates(self):
+    def test_return_all_dates(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -622,16 +576,16 @@ class TestBlockchainGetAvailableGuzis(unittest.TestCase):
         # Act
         result = blockchain._get_available_guzis()
         expected = [
-            ["2011-12-15", [0, 1, 2, 3, 4]],
-            ["2011-12-14", [0, 1, 2, 3, 4]],
-            ["2011-12-13", [0, 1, 2, 3, 4]]
+            ('2011-12-13', 0), ('2011-12-13', 1), ('2011-12-13', 2), ('2011-12-13', 3), ('2011-12-13', 4), 
+            ('2011-12-14', 0), ('2011-12-14', 1), ('2011-12-14', 2), ('2011-12-14', 3), ('2011-12-14', 4), 
+            ('2011-12-15', 0), ('2011-12-15', 1), ('2011-12-15', 2), ('2011-12-15', 3), ('2011-12-15', 4), 
         ]
 
         # Assert
         self.assertEqual(expected, result)
 
     @freeze_time("2011-12-13", auto_tick_seconds=60*60*24)
-    def test_should_return_evolving_total(self):
+    def test_return_evolving_total(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -645,9 +599,9 @@ class TestBlockchainGetAvailableGuzis(unittest.TestCase):
         # Act
         result = blockchain._get_available_guzis()
         expected = [
-            ["2011-12-15", [0, 1, 2, 3, 4, 5, 6]],
-            ["2011-12-14", [0, 1, 2, 3, 4, 5]],
-            ["2011-12-13", [0, 1, 2, 3, 4]]
+            ('2011-12-13', 0), ('2011-12-13', 1), ('2011-12-13', 2), ('2011-12-13', 3), ('2011-12-13', 4), 
+            ('2011-12-14', 0), ('2011-12-14', 1), ('2011-12-14', 2), ('2011-12-14', 3), ('2011-12-14', 4), ('2011-12-14', 5), 
+            ('2011-12-15', 0), ('2011-12-15', 1), ('2011-12-15', 2), ('2011-12-15', 3), ('2011-12-15', 4), ('2011-12-15', 5), ('2011-12-15', 6), 
         ]
 
         # Assert
@@ -656,15 +610,16 @@ class TestBlockchainGetAvailableGuzis(unittest.TestCase):
 class TestUserBlockchainSpendGuzisFromAvailables(unittest.TestCase):
 
     @freeze_time("2011-12-13", auto_tick_seconds=60*60*24)
-    def test_should_remove_older_guzis(self):
+    def test_remove_older_guzis(self):
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
         blockchain[0].total = 4**3
         blockchain.make_daily_guzis()
 
-        blockchain._spend_guzis_from_availables(blockchain._get_available_guzis(), 2)
+        blockchain._spend_guzis_from_availables(blockchain._get_available_guzis(), 3)
         expected = [
-            ["2011-12-13", [0, 1, 2]],
+            ("2011-12-13", 3),
+            ("2011-12-13", 4),
         ]
 
         self.assertEqual(expected, blockchain._get_available_guzis())
@@ -673,7 +628,7 @@ class TestUserBlockchainSpendGuzisFromAvailables(unittest.TestCase):
 class TestBlockchainMakeDailyGuzis(unittest.TestCase):
 
     @freeze_time("1998-12-21", auto_tick_seconds=60*60*24)
-    def test_should_create_GUZI_CREATE_transaction(self):
+    def test_create_GUZI_CREATE_transaction(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -688,7 +643,7 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         self.assertEqual(tx.tx_type, TxType.GUZI_CREATE.value)
 
     @freeze_time("1998-12-21", auto_tick_seconds=60*60*24)
-    def test_should_create_1_guzi_if_total_is_0(self):
+    def test_create_1_guzi_if_total_is_0(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -700,9 +655,9 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         tx = blockchain[0].transactions[0]
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[date(1998,12,24).isoformat(), [0]]])
+        self.assertEqual(tx.guzis_positions, [[[date(1998,12,24).isoformat()], [0]]])
 
-    def test_should_create_6_guzi_if_total_is_125(self):
+    def test_create_6_guzi_if_total_is_125(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -714,9 +669,9 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         tx = blockchain.make_daily_guzis()
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), list(range(6))]])
+        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], list(range(6))]])
 
-    def test_should_use_given_date(self):
+    def test_use_given_date(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -728,12 +683,12 @@ class TestBlockchainMakeDailyGuzis(unittest.TestCase):
         tx = blockchain.make_daily_guzis(dt)
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[dt.isoformat(), [0]]])
+        self.assertEqual(tx.guzis_positions, [[[dt.isoformat()], [0]]])
 
 
 class TestBlockchainMakeDailyGuzas(unittest.TestCase):
 
-    def test_should_create_GUZA_CREATE_transaction(self):
+    def test_create_GUZA_CREATE_transaction(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -747,7 +702,7 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         # Assert
         self.assertEqual(tx.tx_type, TxType.GUZA_CREATE.value)
 
-    def test_should_create_1_guza_if_total_is_0(self):
+    def test_create_1_guza_if_total_is_0(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -759,9 +714,9 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         tx = blockchain[0].transactions[0]
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), [0]]])
+        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], [0]]])
 
-    def test_should_create_6_guza_if_total_is_125(self):
+    def test_create_6_guza_if_total_is_125(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -773,9 +728,9 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         tx = blockchain.make_daily_guzas()
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[date.today().isoformat(), list(range(6))]])
+        self.assertEqual(tx.guzis_positions, [[[date.today().isoformat()], list(range(6))]])
 
-    def test_should_use_given_date(self):
+    def test_use_given_date(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -787,12 +742,12 @@ class TestBlockchainMakeDailyGuzas(unittest.TestCase):
         tx = blockchain.make_daily_guzas(dt)
 
         # Assert
-        self.assertEqual(tx.guzis_positions, [[dt.isoformat(), [0]]])
+        self.assertEqual(tx.guzis_positions, [[[dt.isoformat()], [0]]])
 
 
 class TestBlockchainGetGuzisAmount(unittest.TestCase):
 
-    def test_should_return_0_for_total_0(self):
+    def test_return_0_for_total_0(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -806,7 +761,7 @@ class TestBlockchainGetGuzisAmount(unittest.TestCase):
         # Assert
         self.assertEqual(result, 1)
 
-    def test_should_raise_error_for_negative_total(self):
+    def test_raise_error_for_negative_total(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.start(BIRTHDATE, NEW_USER_PRIV_KEY, REF_PUB_KEY)
@@ -822,7 +777,7 @@ class TestBlockchainGetGuzisAmount(unittest.TestCase):
 
 class TestBlockchainFindTransaction(unittest.TestCase):
 
-    def test_should_return_None_if_not_found(self):
+    def test_return_None_if_not_found(self):
         # Arrange
         blockchain = make_blockchain()
 
@@ -832,7 +787,7 @@ class TestBlockchainFindTransaction(unittest.TestCase):
         # Assert
         self.assertIsNone(result)
 
-    def test_should_return_block_containing_transaction(self):
+    def test_return_block_containing_transaction(self):
         # Arrange
         blockchain = make_blockchain()
 
@@ -852,7 +807,7 @@ class TestBlockchainRefuseTransaction(unittest.TestCase):
         return Transaction(VERSION, TxType.PAYMENT.value, REF_PUB_KEY, 12, tx_date=date(1998, 12, 21).isoformat(), target_user=NEW_USER_PUB_KEY, signature=0x12)
 
     @freeze_time("2011-12-13")
-    def test_should_return_a_refusal_transaction(self):
+    def test_return_a_refusal_transaction(self):
         # Arrange
         blockchain = UserBlockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -873,7 +828,7 @@ class TestBlockchainRefuseTransaction(unittest.TestCase):
         self.assertEqual(refusal.guzis_positions, [])
         self.assertEqual(refusal.detail, refused.signature)
 
-    def test_should_remove_transaction_from_last_block(self):
+    def test_remove_transaction_from_last_block(self):
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -886,7 +841,7 @@ class TestBlockchainRefuseTransaction(unittest.TestCase):
         # Assert
         self.assertEqual(len(blockchain[0].transactions), 0)
 
-    def test_should_raise_error_if_transaction_is_sealed(self):
+    def test_raise_error_if_transaction_is_sealed(self):
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -899,7 +854,7 @@ class TestBlockchainRefuseTransaction(unittest.TestCase):
         with self.assertRaises(NotRemovableTransactionError):
             blockchain.refuse_transaction(refused)
 
-    def test_should_raise_error_if_transaction_is_sealed_in_old_block(self):
+    def test_raise_error_if_transaction_is_sealed_in_old_block(self):
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -971,7 +926,7 @@ class TestBlockContains(unittest.TestCase):
 
 class TestBlockContainUser(unittest.TestCase):
 
-    def test_should_return_false_if_transaction_not_in(self):
+    def test_return_false_if_transaction_not_in(self):
          
         # Arrange
         tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[0]["pub"], 0)
@@ -988,7 +943,7 @@ class TestBlockContainUser(unittest.TestCase):
         self.assertTrue(b._containUser(KEY_POOL[2]["pub"]))
 
 
-    def test_should_return_true_if_transaction_in(self):
+    def test_return_true_if_transaction_in(self):
          
         # Arrange
         tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[0]["pub"], 0)
@@ -1152,7 +1107,7 @@ class TestBlock(unittest.TestCase):
 
 class TestBlockIsSigned(unittest.TestCase):
 
-    def test_signed_block_should_return_true(self):
+    def test_signed_block_return_true(self):
          
         # Arrange
         block = Block()
@@ -1161,7 +1116,7 @@ class TestBlockIsSigned(unittest.TestCase):
         # Assert
         self.assertTrue(block.is_signed())
 
-    def test_unsigned_block_should_return_false(self):
+    def test_unsigned_block_return_false(self):
          
         # Arrange
         block = Block()
@@ -1172,7 +1127,7 @@ class TestBlockIsSigned(unittest.TestCase):
 
 class TestBlockAddTransactions(unittest.TestCase):
 
-    def test_should_increase_transaction_count(self):
+    def test_increase_transaction_count(self):
          
         # Arrange
         block = Block()
@@ -1198,7 +1153,7 @@ class TestBlockAddTransactions(unittest.TestCase):
         # Assert
         self.assertEqual(len(block.transactions), 1)
 
-    def test_should_raise_exception_if_too_much_transactions_in_last_block(self):
+    def test_raise_exception_if_too_much_transactions_in_last_block(self):
          
         # Arrange
         block = Block()
@@ -1211,7 +1166,7 @@ class TestBlockAddTransactions(unittest.TestCase):
         with self.assertRaises(FullBlockError):
             block.add_transaction(tx)
 
-    def test_should_raise_exception_if_block_is_already_signed(self):
+    def test_raise_exception_if_block_is_already_signed(self):
          
         # Arrange
         block = Block()
@@ -1262,7 +1217,7 @@ class TestBlockFindTransaction(unittest.TestCase):
 class TestTransactionSign(unittest.TestCase):
 
     @freeze_time("2011-12-13")
-    def test_signature_should_be_valid(self):
+    def test_signature_be_valid(self):
          
         # Arrange
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
@@ -1278,10 +1233,14 @@ class TestTransactionSign(unittest.TestCase):
 
 
 
-from hypothesis.stateful import RuleBasedStateMachine, rule, invariant, initialize, precondition
-from hypothesis import note, strategies as st
 
 class UserBlockchainStateMachine(RuleBasedStateMachine):
+    """This class runs tests to simulate random usages of Blockchain.
+    It relies on hypothesis which allows to create rules. Each rule simulates
+    one behavious of the Blockchain (creating guzis, making a payment, etc)
+    At the end of the simulation, checks all methods having the @invariant() 
+    decorator
+    """
 
     bc = None
     
@@ -1289,6 +1248,9 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
             my_key_pair=st.sampled_from(KEY_POOL),
             ref_key_pair=st.sampled_from(KEY_POOL))
     def init_blockchain(self, birthdate, my_key_pair, ref_key_pair):
+        """Created a validated Blockchain and initialize some control
+        attributes
+        """
         self.bc = UserBlockchain(my_key_pair['pub'])
         self.bc.start(birthdate.isoformat(), my_key_pair['priv'], ref_key_pair['pub'])
         self.bc.validate(ref_key_pair['priv'], birthdate)
@@ -1300,21 +1262,36 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
 
     @rule()
     def new_day(self):
+        """ Simulate a date change, which has strong impact in Guzis"""
         self.current_date += timedelta(days=1)
         self.guzis_made_today = False
 
     @rule()
-    def create_guzis(self):
+    def make_daily_guzis(self):
+        """Simulates the creation of daily Guzis for the blockchain.
+        Note that if it was already made today, it shouldn't create those
+        again.
+        """
         if not self.guzis_made_today:
-            note(self.guzis)
-            note(self.bc._get_guzis_amount())
             self.guzis += self.bc._get_guzis_amount()
             self.guzis_made_today = True
         self.bc.make_daily_guzis(self.current_date)
 
+    @rule(target_user=st.sampled_from(KEY_POOL), amount=st.integers())
+    def pay_to(self, target_user, amount):
+        """Simulates a payment to another user."""
+        try:
+            self.bc.pay_to_user(target_user['pub'], amount)
+            self.guzis -= amount
+        except (InsufficientFundsError, NegativeAmountError):
+            pass
+
     @precondition(lambda self: self.bc is not None)
     @invariant()
     def check_guzis(self):
+        """Check that blockchain guzis amount is correct"""
+        assert self.guzis >= 0
+        note(self.bc._get_available_guzis())
         assert self.guzis == self.bc._get_available_guzis_amount()
 
 
