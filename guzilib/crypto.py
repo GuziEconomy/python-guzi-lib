@@ -24,6 +24,15 @@ class Signable(Packable):
         return self.signature
 
 
+def is_valid_signature(pubkey, data, signature):
+    try:
+        vk = ecdsa.VerifyingKey.from_string(pubkey, curve=ecdsa.SECP256k1)
+        vk.verify(signature, data)
+        return True
+    except ecdsa.keys.BadSignatureError:
+        return False
+
+
 def guzi_hash(data):
     return hashlib.sha256(data).digest()
 

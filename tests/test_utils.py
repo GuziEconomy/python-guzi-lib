@@ -63,8 +63,8 @@ def make_blockchain(start=date(2000,1,1), days=0, tx_per_block=1, total=0, end_w
                 bc.make_daily_guzis()
             if tx_per_block > 1:
                 for _ in range(1,tx_per_block):
-                    bc.pay_to_user(REF_PUB_KEY, bc._get_guzis_amount())
-            bc.sign_last_block(REF_PRIV_KEY)
+                    bc.pay_to_user(REF_PUB_KEY, bc._get_available_guzis_amount())
+            bc.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
             frozen_date.tick(60*60*24)
     if end_with_empty_block:
         bc.new_block()

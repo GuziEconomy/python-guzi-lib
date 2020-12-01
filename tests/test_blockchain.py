@@ -31,32 +31,6 @@ class TestUserBlockchainStart:
         Blockchain.start() creates blocks with empty data to be filled by
         the reference (if reference accepts to sign, of course).
 
-        Content of Birthday block :
-            In bytes :
-            Type : 1
-            Date (1998/12/21): 914198400.0
-            empty hash : EMPTY_HASH
-            empty merkle : EMPTY_HASH
-            user id : NEW_USER_PUB_KEY
-            guzis : 0
-            guzas : 0
-            balance : 0
-            total : 0
-            transactions count : 0
-            engagements count : 0 
-        Initialisation block :
-            type : 01
-            date : None
-            hash_of_birthday_block : XXX
-            empty_merkle_root : EMPTY_HASH
-            reference_public_key : REF_PUB_KEY
-            guzis : 0
-            guzas : 0
-            balance : 0
-            total : 0
-            transactions count : 0
-            engagements count : 0 
-
         """
 
         # Arrange
@@ -74,7 +48,7 @@ class TestUserBlockchainStart:
         assert birthday_block.version == VERSION
         assert birthday_block.close_date == date(1998, 12, 21)
         assert birthday_block.previous_block_signature == EMPTY_HASH
-        assert birthday_block.merkle_root == EMPTY_HASH
+        assert birthday_block.merkle_root == None
         assert birthday_block.signer == NEW_USER_PUB_KEY
         assert birthday_block.transactions == []
         assert birthday_block.engagements == []
@@ -83,7 +57,7 @@ class TestUserBlockchainStart:
         assert init_block.version == VERSION
         assert init_block.close_date is None
         assert init_block.previous_block_signature == birthday_block.signature
-        assert init_block.merkle_root == EMPTY_HASH
+        assert init_block.merkle_root == None
         assert init_block.signer == REF_PUB_KEY
         assert init_block.transactions == []
         assert init_block.engagements == []
@@ -150,6 +124,13 @@ class TestUserBlockchainValidate:
         assert init_block.merkle_root == expected_merkle_root
         assert len(init_block.transactions) == 2
         assert vk.verify(init_block.signature, expected_data) is True
+
+    def test_validate_with_given_date(self):
+        bc = UserBlockchain(NEW_USER_PUB_KEY)
+        bc.start(date(2000, 1, 1).isoformat(), NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        bc.validate(REF_PRIV_KEY, date(2000, 1, 2))
+
+        assert bc[0].close_date == date(2000, 1, 2)
 
 
 class TestUserBlockchainPayToUser:
@@ -259,7 +240,7 @@ class TestBlockchainAddTransaction:
         transaction = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
 
         # Act
-        blockchain.add_transaction(transaction)
+        blockchain._add_transaction(transaction)
 
         # Assert
         assert len(blockchain) == 3
@@ -283,7 +264,7 @@ class TestBlockchainNewBlock:
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
-        blockchain.sign_last_block(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
 
         # Act
         blockchain.new_block()
@@ -305,7 +286,7 @@ class TestBlockchainReduce:
         tx3 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[3]["pub"], 0)
         tx4 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[4]["pub"], 0)
         blockchain[0].add_transactions([tx0, tx1, tx2])
-        blockchain.sign_last_block(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
         blockchain.new_block()
         blockchain[0].add_transactions([tx3, tx4])
 
@@ -326,7 +307,7 @@ class TestBlockchainReduce:
         tx3 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[3]["pub"], 0)
         tx4 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[4]["pub"], 0)
         blockchain[0].add_transactions([tx0, tx1, tx2])
-        blockchain.sign_last_block(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
         blockchain.new_block()
         blockchain[0].add_transactions([tx3, tx4])
 
@@ -385,10 +366,20 @@ class TestBlockchainSignLastBlock:
         blockchain.new_block()
         
         # Act
-        blockchain.sign_last_block(REF_PRIV_KEY)
+        blockchain.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
 
         # Assert
         assert blockchain[0].is_signed() is True
+
+    def test_signer_is_set(self):
+        bc = Blockchain(NEW_USER_PUB_KEY)
+        bc.new_block()
+        
+        # Act
+        bc.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
+
+        # Assert
+        assert bc[0].signer == REF_PUB_KEY
 
 
 @freeze_time("2011-12-13")
@@ -759,7 +750,7 @@ class TestBlockchainRefuseTransaction:
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
         refused = self.make_any_transaction()
-        blockchain.add_transaction(refused)
+        blockchain._add_transaction(refused)
 
         # Action
         refusal = blockchain.refuse_transaction(refused)
@@ -772,8 +763,8 @@ class TestBlockchainRefuseTransaction:
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
         refused = self.make_any_transaction()
-        blockchain.add_transaction(refused)
-        blockchain.sign_last_block(NEW_USER_PRIV_KEY)
+        blockchain._add_transaction(refused)
+        blockchain.sign_last_block(NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
 
         # Action
         # Assert
@@ -785,8 +776,8 @@ class TestBlockchainRefuseTransaction:
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
         refused = self.make_any_transaction()
-        blockchain.add_transaction(refused)
-        blockchain.sign_last_block(NEW_USER_PRIV_KEY)
+        blockchain._add_transaction(refused)
+        blockchain.sign_last_block(NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
         blockchain.new_block()
 
         # Action
@@ -814,6 +805,72 @@ class TestBlockchainContainTransaction:
 
         # Assert
         assert bc._contain_transaction(random_transaction()) is False
+
+
+class TestBLockchainIsValid:
+
+    def test_empty_ok(self):
+        bc = Blockchain(NEW_USER_PUB_KEY)
+
+        result = bc.is_valid()
+
+        assert result is True
+
+    def test_birth_only_ok(self):
+        bc = UserBlockchain(NEW_USER_PUB_KEY)
+        bc.start(date(2000, 1, 1).isoformat(), NEW_USER_PRIV_KEY, REF_PUB_KEY)
+
+        result = bc.is_valid()
+
+        assert result is True
+
+    def test_birth_false_signature_ko(self):
+        bc = UserBlockchain(NEW_USER_PUB_KEY)
+        # Fails because REF_PRIV_KEY should be NEW_USER_PRIV_KEY
+        bc.start(date(2000, 1, 1).isoformat(), REF_PRIV_KEY, REF_PUB_KEY)
+
+        result = bc.is_valid()
+
+        assert result is False
+
+    def test_validated_blockchain_ok(self):
+        bc = UserBlockchain(NEW_USER_PUB_KEY)
+        bc.start(date(2000, 1, 1).isoformat(), NEW_USER_PRIV_KEY, REF_PUB_KEY)
+        bc.validate(REF_PRIV_KEY, date(2000, 1, 2))
+
+        result = bc.is_valid()
+
+        assert result is True
+
+    def test_blockchain_with_some_transactions_ok(self):
+        bc = make_blockchain(days=5, tx_per_block=1)
+
+        result = bc.is_valid()
+
+        assert result is True
+
+    def test_blockchain_with_empty_ending_block_ok(self):
+        bc = make_blockchain(days=1, tx_per_block=1, end_with_empty_block=True)
+
+        result = bc.is_valid()
+
+        assert result is True
+
+    def test_blockchain_with_multiple_tx_per_block(self):
+        bc = make_blockchain(days=4, tx_per_block=4)
+
+        result = bc.is_valid()
+
+        assert result is True
+        
+    def test_change_transactions_after_signed_ko(self):
+        bc = make_blockchain(days=4, tx_per_block=4)
+        bc[0].transactions[0].amount = 12
+        print(bc[0].transactions[0], bc[0].is_signed())
+
+        result = bc.is_valid()
+
+        assert result is False
 
 
 class TestBlockContains:
@@ -944,12 +1001,11 @@ class TestBlock:
                 date(1998, 12, 21).isoformat(),
                 previous_block_signature=EMPTY_HASH,
                 merkle_root=EMPTY_HASH,
-                signer=NEW_USER_PUB_KEY,
                 balance=0, total=0)
-        data = block.pack_for_hash()
 
         # Act
-        signature = block.sign(REF_PRIV_KEY)
+        signature = block.sign(REF_PUB_KEY, REF_PRIV_KEY)
+        data = block.pack_for_hash()
 
         # Assert
         assert vk.verify(signature, data) is True
@@ -1037,7 +1093,7 @@ class TestBlockIsSigned:
          
         # Arrange
         block = Block()
-        block.sign(REF_PRIV_KEY)
+        block.sign(REF_PUB_KEY, REF_PRIV_KEY)
 
         # Assert
         assert block.is_signed() is True
@@ -1098,7 +1154,7 @@ class TestBlockAddTransactions:
         block = Block()
         tx = Transaction(VERSION, Transaction.GUZI_CREATE, EMPTY_HASH, 0)
 
-        block.sign(REF_PRIV_KEY)
+        block.sign(REF_PUB_KEY, REF_PRIV_KEY)
 
         # Act
         with pytest.raises(FullBlockError):

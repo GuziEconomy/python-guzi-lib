@@ -1,5 +1,5 @@
 import umsgpack
-from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH
+from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH, is_valid_signature
 from guzilib.packer import BytePacker
 from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
 import pytz
@@ -84,7 +84,7 @@ class Blockchain(list):
         """
         pass
 
-    def add_transaction(self, transaction):
+    def _add_transaction(self, transaction):
         assert(isinstance(transaction, Transaction))
         self[0].add_transaction(transaction)
 
@@ -116,11 +116,16 @@ class Blockchain(list):
         True if given blockchain seems valid
         False if an incoherence was detected
         """
-        pass
+        if len(self) == 0:
+            return True
+        for b in self:
+            if not b.is_valid(self.pubkey):
+                return False
+        return True
 
-    def sign_last_block(self, privkey):
+    def sign_last_block(self, pubkey, privkey):
         self[0].close_date = date.today()
-        self[0].sign(privkey)
+        self[0].sign(pubkey, privkey)
 
     def _reduce(self, pubkey):
         for index, block in list(enumerate(self)):
@@ -160,21 +165,20 @@ class UserBlockchain(Blockchain):
         self.insert(0, BirthBlock(birthdate, self.pubkey, my_privkey))
         init_block = Block(
                 previous_block_signature=self[0].signature,
-                signer=ref_pubkey,
-                merkle_root=EMPTY_HASH)
+                signer=ref_pubkey)
         self.insert(0, init_block)
 
     def validate(self, ref_privkey, dt=None):
         init_block = self[0]
         init_block.balance = 0
         init_block.total = 0
-        init_block.close_date = date.today()
+        init_block.close_date = dt or date.today()
         init_block.guzi_index = (init_block.close_date.isoformat(), 0)
         init_block.guza_index = (init_block.close_date.isoformat(), 0)
         self.make_daily_guzis(dt)
         self.make_daily_guzas(dt)
         init_block.compute_merkle_root()
-        init_block.sign(ref_privkey)
+        init_block.sign(init_block.signer, ref_privkey)
 
     def _get_guzis_amount(self):
         n = self[0].total
@@ -200,7 +204,7 @@ class UserBlockchain(Blockchain):
         tx = Transaction(VERSION, Transaction.GUZI_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
         if self._contain_transaction(tx):
             return
-        self.add_transaction(tx)
+        self._add_transaction(tx)
         if self.last_spend_date is None:
             self.last_spend_date = dt
         return self[0].transactions[0]
@@ -217,7 +221,7 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzas = [[[dt.isoformat()], list(range(amount))]]
-        self.add_transaction(Transaction(VERSION, Transaction.GUZA_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
+        self._add_transaction(Transaction(VERSION, Transaction.GUZA_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
         return self[0].transactions[0]
 
     def pay_to_user(self, target, amount):
@@ -240,7 +244,7 @@ class UserBlockchain(Blockchain):
             guzis_positions=guzis_positions
         )
         self._spend_guzis_from_availables(guzis_positions, amount)
-        self.add_transaction(tx)
+        self._add_transaction(tx)
         return tx
 
     def pay_to_company(self, target, amount):
@@ -351,6 +355,11 @@ class Block(Signable):
     def __eq__(self, other):
         return other is not None and isinstance(other, Block) and self.pack() == other.pack()
 
+    def sign(self, pub, priv):
+        self.signer = pub
+        self.compute_merkle_root()
+        return super().sign(priv)
+
     def add_transaction(self, tx):
         if self.is_signed():
             raise FullBlockError
@@ -404,12 +413,31 @@ class Block(Signable):
         return self.packer.pack_block(self)
 
     def compute_merkle_root(self):
-        self.merkle_root = self._tx_list_to_merkle_root(
-            [t.to_hash() for t in self.transactions])
+        self.merkle_root = self._merkle_root()
         return self.merkle_root
+
+    def _merkle_root(self):
+        return self._tx_list_to_merkle_root(
+            [t.to_hash() for t in self.transactions])
 
     def as_email(self):
         pass
+
+    def is_valid(self, owner):
+        if self._is_birthblock(owner):
+            return is_valid_signature(owner, self.pack_for_hash(), self.signature)
+        if self.is_signed():
+            return (is_valid_signature(self.signer, self.pack_for_hash(), self.signature)
+                    and self._has_valid_merkleroot())
+        return True
+
+    def _is_birthblock(self, owner):
+        return (self.merkle_root == EMPTY_HASH
+                and self.previous_block_signature == EMPTY_HASH
+                and self.signer == owner)
+
+    def _has_valid_merkleroot(self):
+        return self._merkle_root() == self.merkle_root
 
     def is_signed(self):
         return self.signature is not None
@@ -463,7 +491,7 @@ class BirthBlock(Block):
                 signer=new_user_pub_key)
         self.previous_block_signature = EMPTY_HASH
         self.merkle_root = EMPTY_HASH
-        self.sign(new_user_priv_key)
+        self.sign(new_user_pub_key, new_user_priv_key)
 
 
 class Transaction(Signable):
