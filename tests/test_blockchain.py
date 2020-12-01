@@ -9,75 +9,11 @@ from io import BytesIO
 from freezegun import freeze_time
 from datetime import date, timedelta
 
-from guzilib.blockchain import *
+from guzilib.blockchain import VERSION, Blockchain, UserBlockchain, Block, Transaction, MAX_TX_IN_BLOCK
+from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
+from guzilib.crypto import guzi_hash, EMPTY_HASH
+from tests.test_utils import NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY, REF_PUB_KEY, REF_PRIV_KEY, KEY_POOL, BIRTHDATE, make_blockchain, random_transaction
 
-KEY_POOL = [
-    {'priv': bytes.fromhex('cdb162375e04db352c1474802b42ac9c972c34708411629074248e241f60ddd6'),
-    'pub': bytes.fromhex('02071205369c6131b7abaafebedfda83fae72232746bdf04601290a76caebc521b')},
-    {'priv': bytes.fromhex('7b2a9dac572a0952fa78597e3a456ecaa201ce753a93d14ff83cb48762134bca'),
-    'pub': bytes.fromhex('031f34e8aa8488358a81ef61d901e77e9237d19f9f6bff306c8938c748ef45623d')},
-    {'priv': bytes.fromhex('1f77f037236b5a6763b2a18de13855b3d4a893c06bd004ba0f739c8d2f281103'),
-    'pub': bytes.fromhex('032a2eefc84ff6fd6a15eb1e920254cd02725350c67080a00970f535a762417cbb')},
-    {'priv': bytes.fromhex('f7aa7d91e5b6f82302f82d6c20346cc442729e5ceae6bdb26ea4bd4367a07c4d'),
-    'pub': bytes.fromhex('034dffbff09cd2ca67fc9ea67ad4c23e29d9e7febd6c82e8a82ae5e52df4220f6f')},
-    {'priv': bytes.fromhex('4768e8b37d07ff15bf2149f1fcbf0788be1f00e6b8f365ecbb751b6260d711dc'),
-    'pub': bytes.fromhex('02e490be01204314c0918ce6c781b3e6a1ef76f337344a4605589a8185379cd9ac')},
-    {'priv': bytes.fromhex('2c81a0b8bf49a4dd5a0ddb8b34f63fee0fe1c4d7673ed6376a07ed7a33430d18'),
-    'pub': bytes.fromhex('03ef500f14cfdafc25b88c9d054844bd50cf37fd12a374d08e06d8e92fe751471c')},
-    {'priv': bytes.fromhex('15a9e23b4bce92ee78b556c53dce720a5f538cb94719280e6bfb8dfbde33d049'),
-    'pub': bytes.fromhex('036ca32ba58cebf40dee409ddab41263afd1d5a3a74ab4ea317d9cadf32b8a530c')},
-    {'priv': bytes.fromhex('99184560439a716ab85316e6884ea901f076ca678d4f38f295f9201a7bccaa7e'),
-    'pub': bytes.fromhex('02b141e661a3beb6c251502f1ed2c1d3d00a65f3a2aae6c557980df6f8e7fb89ba')},
-    {'priv': bytes.fromhex('8428ef9ae38b229f2d36379d08e5b35c2c0443000e1d052e987da3a85269bc2c'),
-    'pub': bytes.fromhex('0284dd75d374c23f8a783fc7bb4f1f5268b59ff3264c23cf54ac0baa4567fc7362')},
-    {'priv': bytes.fromhex('a08f8b3e23129287cf24a973da9e6ad5ce5558a7ba2ff1b913c197351966f5af'),
-    'pub': bytes.fromhex('03ce3f8e980235165f5fc690f7c08eac3d0c7ba09541122f182f6b8c81431583d5')},
-    {'priv': bytes.fromhex('53ddf4b6fbf29ffb44192e15f87daf83dbf92f4bf6e609ddff60e2aa7f6125ed'),
-    'pub': bytes.fromhex('036cb8ac481bcd55cc876889be9e262a45da5612433bb34c0c5826703140dc6580')},
-    {'priv': bytes.fromhex('b69dda00c4cc3721ee056096a7f51283d9793fb1f8326cf2d3c47d50ce860a5a'),
-    'pub': bytes.fromhex('02fb673d955d41debc1c09fc889730038adecc1bab653bf39ebbeda57cc03ff455')}
-]
-NEW_USER_PUB_KEY = KEY_POOL[0]['pub']
-NEW_USER_PRIV_KEY = KEY_POOL[0]['priv']
-REF_PUB_KEY =  KEY_POOL[1]['pub']
-REF_PRIV_KEY = KEY_POOL[1]['priv']
-
-BIRTHDATE = date(1998, 12, 21).isoformat()
-
-def random_transaction():
-    return Transaction(VERSION, TxType.PAYMENT, REF_PUB_KEY, 12, tx_date=date(1998, 12, 21).isoformat(), target_user=NEW_USER_PUB_KEY, signature=0x12)
-
-def make_blockchain(start=date(2000,1,1), days=0, tx_per_block=1, total=0, end_with_empty_block=False):
-    """Make a Blockchain with given informations
-
-    :start: The starting date (and birthdate) of the blockchain
-    :days: Number of days that occurs
-    :tx_per_block: Number of transactions created per block.
-    :total: Accumulated total of the blockchain after init
-    :end_with_empty_block: Append an empty block to the end of the blockchain
-    if set to True.
-    :returns: Blockchain
-
-    Note: There is always one day per block
-
-    """
-    with freeze_time(start) as frozen_date:
-        bc = UserBlockchain(NEW_USER_PUB_KEY)
-        bc.start(start.isoformat(), NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        bc[0].total = total
-        bc.validate(REF_PRIV_KEY)
-        for _ in range(days):
-            bc.new_block()
-            if tx_per_block > 0:
-                bc.make_daily_guzis()
-            if tx_per_block > 1:
-                for _ in range(1,tx_per_block):
-                    bc.pay_to_user(REF_PUB_KEY, bc._get_guzis_amount())
-            bc.sign_last_block(REF_PRIV_KEY)
-            frozen_date.tick(60*60*24)
-    if end_with_empty_block:
-        bc.new_block()
-    return bc
 
 class TestUserBlockchainStart:
 
@@ -229,7 +165,7 @@ class TestUserBlockchainPayToUser:
 
     def test_transaction_is_correctly_created(self):
         result = self.init()
-        expected_tx = Transaction(VERSION, TxType.PAYMENT.value, 
+        expected_tx = Transaction(VERSION, Transaction.PAYMENT, 
                 source=NEW_USER_PUB_KEY,
                 amount=2,
                 tx_date=date(2011,12,15).isoformat(), 
@@ -320,7 +256,7 @@ class TestBlockchainAddTransaction:
          
         # Arrange
         blockchain = self.make_active_blockchain()
-        transaction = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        transaction = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
 
         # Act
         blockchain.add_transaction(transaction)
@@ -363,11 +299,11 @@ class TestBlockchainReduce:
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[0]["pub"], 0)
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[1]["pub"], 0)
-        tx2 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[2]["pub"], 0)
-        tx3 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[3]["pub"], 0)
-        tx4 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[4]["pub"], 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[0]["pub"], 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[1]["pub"], 0)
+        tx2 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[2]["pub"], 0)
+        tx3 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[3]["pub"], 0)
+        tx4 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[4]["pub"], 0)
         blockchain[0].add_transactions([tx0, tx1, tx2])
         blockchain.sign_last_block(REF_PRIV_KEY)
         blockchain.new_block()
@@ -384,11 +320,11 @@ class TestBlockchainReduce:
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[0]["pub"], 0)
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[1]["pub"], 0)
-        tx2 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[2]["pub"], 0)
-        tx3 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[3]["pub"], 0)
-        tx4 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[4]["pub"], 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[0]["pub"], 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[1]["pub"], 0)
+        tx2 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[2]["pub"], 0)
+        tx3 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[3]["pub"], 0)
+        tx4 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[4]["pub"], 0)
         blockchain[0].add_transactions([tx0, tx1, tx2])
         blockchain.sign_last_block(REF_PRIV_KEY)
         blockchain.new_block()
@@ -630,7 +566,7 @@ class TestBlockchainMakeDailyGuzis:
         tx = blockchain[0].transactions[0]
 
         # Assert
-        assert tx.tx_type == TxType.GUZI_CREATE.value
+        assert tx.tx_type == Transaction.GUZI_CREATE
 
     @freeze_time("1998-12-21", auto_tick_seconds=60*60*24)
     def test_create_1_guzi_if_total_is_0(self):
@@ -690,7 +626,7 @@ class TestBlockchainMakeDailyGuzas:
         tx = blockchain[0].transactions[0]
 
         # Assert
-        assert tx.tx_type == TxType.GUZA_CREATE.value
+        assert tx.tx_type == Transaction.GUZA_CREATE
 
     def test_create_1_guza_if_total_is_0(self):
         # Arrange
@@ -794,7 +730,7 @@ class TestBlockchainFindTransaction:
 class TestBlockchainRefuseTransaction:
 
     def make_any_transaction(self):
-        return Transaction(VERSION, TxType.PAYMENT.value, REF_PUB_KEY, 12, tx_date=date(1998, 12, 21).isoformat(), target_user=NEW_USER_PUB_KEY, signature=0x12)
+        return Transaction(VERSION, Transaction.PAYMENT, REF_PUB_KEY, 12, tx_date=date(1998, 12, 21).isoformat(), target_user=NEW_USER_PUB_KEY, signature=0x12)
 
     @freeze_time("2011-12-13")
     def test_return_a_refusal_transaction(self):
@@ -809,7 +745,7 @@ class TestBlockchainRefuseTransaction:
         refusal = blockchain.refuse_transaction(refused)
         
         # Assert
-        assert refusal.tx_type == TxType.REFUSAL.value
+        assert refusal.tx_type == Transaction.REFUSAL
         assert refusal.date == date(2011, 12, 13)
         assert refusal.source == refused.target_user
         assert refusal.amount == refused.amount
@@ -885,9 +821,9 @@ class TestBlockContains:
     def test_transaction_found(self):
          
         # Arrange
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx2 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
+        tx2 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         b = Block()
 
         # Act
@@ -902,9 +838,9 @@ class TestBlockContains:
     def test_transaction_not_found(self):
          
         # Arrange
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx1 = Transaction(VERSION, TxType.GUZA_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx2 = Transaction(VERSION, TxType.PAYMENT.value, NEW_USER_PUB_KEY, 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZA_CREATE, NEW_USER_PUB_KEY, 0)
+        tx2 = Transaction(VERSION, Transaction.PAYMENT, NEW_USER_PUB_KEY, 0)
         b = Block()
 
         # Act
@@ -919,9 +855,9 @@ class TestBlockContainUser:
     def test_return_false_if_transaction_not_in(self):
          
         # Arrange
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[0]["pub"], 0)
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[1]["pub"], 0)
-        tx2 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[2]["pub"], 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[0]["pub"], 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[1]["pub"], 0)
+        tx2 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[2]["pub"], 0)
         b = Block()
 
         # Act
@@ -936,8 +872,8 @@ class TestBlockContainUser:
     def test_return_true_if_transaction_in(self):
          
         # Arrange
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[0]["pub"], 0)
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, KEY_POOL[1]["pub"], 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[0]["pub"], 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, KEY_POOL[1]["pub"], 0)
         b = Block()
 
         # Act
@@ -1039,7 +975,7 @@ class TestBlock:
         hash(hash0 + hash0)
         """
         # Arrange
-        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         block = Block()
         block.add_transaction(tx)
 
@@ -1058,8 +994,8 @@ class TestBlock:
         hash(hash0 + hash1)
         """
         # Arrange
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         block = Block()
         block.add_transactions([tx0, tx1])
 
@@ -1078,9 +1014,9 @@ class TestBlock:
         hash(hash(hash0 + hash1) + hash(hash3 + hash3))
         """
         # Arrange
-        tx0 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx1 = Transaction(VERSION, TxType.GUZA_CREATE.value, NEW_USER_PUB_KEY, 0)
-        tx2 = Transaction(VERSION, TxType.GUZA_CREATE.value, REF_PUB_KEY, 0)
+        tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZA_CREATE, NEW_USER_PUB_KEY, 0)
+        tx2 = Transaction(VERSION, Transaction.GUZA_CREATE, REF_PUB_KEY, 0)
         block = Block()
         block.add_transactions([tx0, tx1, tx2])
 
@@ -1121,7 +1057,7 @@ class TestBlockAddTransactions:
          
         # Arrange
         block = Block()
-        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, EMPTY_HASH, 0)
+        tx = Transaction(VERSION, Transaction.GUZI_CREATE, EMPTY_HASH, 0)
 
         # Act
         block.add_transaction(tx)
@@ -1133,7 +1069,7 @@ class TestBlockAddTransactions:
          
         # Arrange
         block = Block()
-        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, EMPTY_HASH, 0)
+        tx = Transaction(VERSION, Transaction.GUZI_CREATE, EMPTY_HASH, 0)
 
         # Act
         block.add_transaction(tx)
@@ -1147,10 +1083,10 @@ class TestBlockAddTransactions:
          
         # Arrange
         block = Block()
-        tx = Transaction(VERSION, TxType.PAYMENT.value, NEW_USER_PUB_KEY, 0)
+        tx = Transaction(VERSION, Transaction.PAYMENT, NEW_USER_PUB_KEY, 0)
 
         for i in range(MAX_TX_IN_BLOCK):
-           block.add_transaction(Transaction(VERSION, TxType.PAYMENT.value, NEW_USER_PUB_KEY, i))
+           block.add_transaction(Transaction(VERSION, Transaction.PAYMENT, NEW_USER_PUB_KEY, i))
 
         # Act
         with pytest.raises(FullBlockError):
@@ -1160,7 +1096,7 @@ class TestBlockAddTransactions:
          
         # Arrange
         block = Block()
-        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, EMPTY_HASH, 0)
+        tx = Transaction(VERSION, Transaction.GUZI_CREATE, EMPTY_HASH, 0)
 
         block.sign(REF_PRIV_KEY)
 
@@ -1173,32 +1109,32 @@ class TestBlockFindTransaction:
 
     def test_found_transaction(self):
         block = Block()
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         tx1.date = date(2011, 12, 13)
-        tx2 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx2 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         tx2.date = date(2012, 11, 14)
-        tx3 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx3 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         tx3.date = date(2013, 10, 15)
 
         # Act
         block.add_transactions([tx1, tx2, tx3])
-        result = block.find_transaction(TxType.GUZI_CREATE.value, date(2012, 11, 14))
+        result = block.find_transaction(Transaction.GUZI_CREATE, date(2012, 11, 14))
 
         # Assert
         assert result == tx2
 
     def test_unfound_transaction(self):
         block = Block()
-        tx1 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         tx1.date = date(2011, 12, 13)
-        tx2 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx2 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         tx2.date = date(2012, 11, 14)
-        tx3 = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0)
+        tx3 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
         tx3.date = date(2013, 10, 15)
 
         # Act
         block.add_transactions([tx1, tx2, tx3])
-        result = block.find_transaction(TxType.GUZI_CREATE.value, date(2014, 11, 14))
+        result = block.find_transaction(Transaction.GUZI_CREATE, date(2014, 11, 14))
 
         # Assert
         assert result is None
@@ -1213,7 +1149,7 @@ class TestTransactionSign:
         vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
 
         # Act
-        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, NEW_USER_PUB_KEY, 0,
+        tx = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0,
                 date(2011, 12, 13).isoformat())
         data = tx.pack_for_hash()
         tx.sign(NEW_USER_PRIV_KEY)

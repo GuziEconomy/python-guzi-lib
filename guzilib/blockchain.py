@@ -1,6 +1,13 @@
-from guzilib.utils import *
+import umsgpack
+from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH
+from guzilib.packer import BytePacker
+from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
 import pytz
 from datetime import date
+from enum import Enum
+
+VERSION = 1
+MAX_TX_IN_BLOCK = 30
 
 class Blockchain(list):
 
@@ -96,7 +103,7 @@ class Blockchain(list):
             if self[0].is_signed():
                 raise NotRemovableTransactionError
             self[0]._remove_transaction(transaction)
-        return Transaction(VERSION, TxType.REFUSAL.value,
+        return Transaction(VERSION, Transaction.REFUSAL,
                 source=transaction.target_user,
                 amount=transaction.amount,
                 tx_date=date.today().isoformat(),
@@ -190,7 +197,7 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzis = [[[dt.isoformat()], list(range(amount))]]
-        tx = Transaction(VERSION, TxType.GUZI_CREATE.value, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
+        tx = Transaction(VERSION, Transaction.GUZI_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
         if self._contain_transaction(tx):
             return
         self.add_transaction(tx)
@@ -210,7 +217,7 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzas = [[[dt.isoformat()], list(range(amount))]]
-        self.add_transaction(Transaction(VERSION, TxType.GUZA_CREATE.value, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
+        self.add_transaction(Transaction(VERSION, Transaction.GUZA_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
         return self[0].transactions[0]
 
     def pay_to_user(self, target, amount):
@@ -225,7 +232,7 @@ class UserBlockchain(Blockchain):
         guzis_positions = self._get_available_guzis()
         tx = Transaction(
             VERSION,
-            TxType.PAYMENT.value,
+            Transaction.PAYMENT,
             self.pubkey,
             amount,
             tx_date=date.today().isoformat(),
@@ -461,6 +468,19 @@ class BirthBlock(Block):
 
 class Transaction(Signable):
 
+    GUZI_CREATE = 0x00
+    GUZA_CREATE = 0x01
+    PAYMENT = 0x02
+    GUZI_ENGAGEMENT = 0x03
+    GUZA_ENGAGEMENT = 0x04
+    REFUSAL = 0x05
+    OWNER_SET = 0x10
+    ADMIN_SET = 0x11
+    WORKER_SET = 0x12
+    PAYER_SET = 0x13
+    PAY_ORDER = 0x14
+    LEAVE_ORDER = 0x15
+
     def __init__(self, version, tx_type, source, amount, tx_date=None,
             target_company=None, target_user=None, guzis_positions=[], detail=None, signature=None):
         self.version = version
@@ -524,6 +544,6 @@ class Transaction(Signable):
         pass
 
     def _guzis(self):
-        if self.tx_type == TxType.GUZI_CREATE.value:
+        if self.tx_type == Transaction.GUZI_CREATE:
             return self.guzis_positions
         return []
