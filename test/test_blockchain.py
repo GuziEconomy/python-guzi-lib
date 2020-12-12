@@ -24,7 +24,7 @@ from guzilib.errors import (
     NotRemovableTransactionError,
     UnsignedPreviousBlockError,
 )
-from tests.test_utils import (
+from test.test_utils import (
     BIRTHDATE,
     KEY_POOL,
     NEW_USER_PRIV_KEY,

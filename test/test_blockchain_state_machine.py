@@ -12,7 +12,7 @@ from hypothesis.stateful import (
 
 from guzilib.blockchain import UserBlockchain
 from guzilib.errors import InsufficientFundsError, NegativeAmountError
-from tests.test_blockchain import KEY_POOL
+from test.test_blockchain import KEY_POOL
 
 
 class UserBlockchainStateMachine(RuleBasedStateMachine):
