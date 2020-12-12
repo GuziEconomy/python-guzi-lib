@@ -38,6 +38,12 @@ black = "*"
 pdbpp = "*"
 
 [dev-packages]
+black = "==20.8b0"
+isort = "*"
+flake8 = "*"
 
 [requires]
 python_version = "3.7"
+
+[pipenv]
+allow_prereleases = true

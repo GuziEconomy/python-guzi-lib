@@ -1,5 +1,6 @@
 import umsgpack
 
+
 class Packer:
     def pack_transaction(self, transaction):
         return NotImplemented
@@ -18,7 +19,6 @@ class Packer:
 
 
 class BytePacker(Packer):
-
     def pack_transaction(self, transaction):
         return umsgpack.packb(transaction.as_full_list())
 

@@ -1,18 +1,33 @@
 import itertools
-import pytz
-import umsgpack
 from datetime import date
 from enum import Enum
 
-from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH, is_valid_signature, zip_positions
-from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
+import pytz
+import umsgpack
+
+from guzilib.crypto import (
+    EMPTY_HASH,
+    Signable,
+    guzi_hash,
+    is_valid_signature,
+    unzip_positions,
+    zip_positions,
+)
+from guzilib.errors import (
+    FullBlockError,
+    InsufficientFundsError,
+    InvalidBlockchainError,
+    NegativeAmountError,
+    NotRemovableTransactionError,
+    UnsignedPreviousBlockError,
+)
 from guzilib.packer import BytePacker
 
 VERSION = 1
 MAX_TX_IN_BLOCK = 30
 
-class Blockchain(list):
 
+class Blockchain(list):
     def __init__(self, pubkey):
         self.pubkey = pubkey
         self.packer = BytePacker()
@@ -21,7 +36,7 @@ class Blockchain(list):
         if other is None:
             return False
         if isinstance(other, Blockchain):
-            if len(self) !=len(other):
+            if len(self) != len(other):
                 return False
             for b1, b2 in zip(self, other):
                 if b1 != b2:
@@ -109,7 +124,7 @@ class Blockchain(list):
 
         :returns: None
         """
-        assert(isinstance(tx, Transaction))
+        assert isinstance(tx, Transaction)
         self[0].add_transaction(tx)
 
     def refuse_transaction(self, transaction):
@@ -129,12 +144,15 @@ class Blockchain(list):
             if self[0].is_signed():
                 raise NotRemovableTransactionError
             self[0]._remove_tx(transaction)
-        return Transaction(VERSION, Transaction.REFUSAL,
-                source=transaction.target_user,
-                amount=transaction.amount,
-                tx_date=date.today().isoformat(),
-                target_user=transaction.source,
-                detail=transaction.signature)
+        return Transaction(
+            VERSION,
+            Transaction.REFUSAL,
+            source=transaction.target_user,
+            amount=transaction.amount,
+            tx_date=date.today().isoformat(),
+            target_user=transaction.source,
+            detail=transaction.signature,
+        )
 
     def is_valid(self):
         """Return True if given blockchain seems valid
@@ -161,14 +179,14 @@ class Blockchain(list):
         """Reduce the Blockchain to the minimum size depending on target user
 
         If target user already had a Transaction with me, then I do not need to
-        send him all my Blockchain, but only the part between now and the 
+        send him all my Blockchain, but only the part between now and the
         previous Transaction we had together.
 
         :returns: List
         """
         for index, block in list(enumerate(self)):
             if block._containUser(pubkey):
-                return self[:index+1]
+                return self[: index + 1]
         return self
 
     def _from_hashed_blocks(self, hashed_blocks):
@@ -196,7 +214,6 @@ class Blockchain(list):
 
 
 class UserBlockchain(Blockchain):
-
     def __init__(self, pubkey):
         super().__init__(pubkey)
         self.available_guzis = None
@@ -206,7 +223,7 @@ class UserBlockchain(Blockchain):
         self.guzis_positions = None
 
     def start(self, birthdate, my_privkey, ref_pubkey):
-        """Create a new blockchain. This blockchain won't be usable to pay or 
+        """Create a new blockchain. This blockchain won't be usable to pay or
         create guzis while it has not been validated by a referent.
 
         :birthdate: datetime.date The date of birth of new user
@@ -218,8 +235,8 @@ class UserBlockchain(Blockchain):
         self.clear()
         self.insert(0, BirthBlock(birthdate, self.pubkey, my_privkey))
         init_block = Block(
-                previous_block_signature=self[0].signature,
-                signer=ref_pubkey)
+            previous_block_signature=self[0].signature, signer=ref_pubkey
+        )
         self.insert(0, init_block)
 
     def validate(self, ref_privkey, dt=None):
@@ -245,14 +262,14 @@ class UserBlockchain(Blockchain):
         n = self[0].total
         if n < 0:
             raise InvalidBlockchainError("Total can never be negative")
-        floatroot = (n ** (1.0 / 3.0))
+        floatroot = n ** (1.0 / 3.0)
         introot = int(round(floatroot))
-        if introot*introot*introot == n:
+        if introot * introot * introot == n:
             return introot + 1
         return introot
 
     def make_daily_guzis(self, dt=None):
-        """ Return int number of guzis availables
+        """Return int number of guzis availables
 
         A Guzi Creation Transaction is done by a user to himself, creating his own
         Guzis. This transaction only contains date, user id and the amount of
@@ -265,7 +282,14 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzis = [[[dt.isoformat()], list(range(amount))]]
-        tx = Transaction(VERSION, Transaction.GUZI_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
+        tx = Transaction(
+            VERSION,
+            Transaction.GUZI_CREATE,
+            self.pubkey,
+            amount,
+            tx_date=dt.isoformat(),
+            guzis_positions=guzis,
+        )
         if self._contain_tx(tx):
             return
         self._add_transaction(tx)
@@ -273,7 +297,7 @@ class UserBlockchain(Blockchain):
 
     def make_daily_guzas(self, dt=None):
         # TODO : check age > 18
-        """ Return int number of guzas availables
+        """Return int number of guzas availables
 
         A Guza Creation Transaction is done by a user to himself, creating his own
         Guzas. This transaction only contains date, user id and the amount of
@@ -286,7 +310,16 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzas = [[[dt.isoformat()], list(range(amount))]]
-        self._add_transaction(Transaction(VERSION, Transaction.GUZA_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzas))
+        self._add_transaction(
+            Transaction(
+                VERSION,
+                Transaction.GUZA_CREATE,
+                self.pubkey,
+                amount,
+                tx_date=dt.isoformat(),
+                guzis_positions=guzas,
+            )
+        )
         return self[0].transactions[0]
 
     def pay_to_user(self, target, amount):
@@ -311,7 +344,7 @@ class UserBlockchain(Blockchain):
             amount,
             tx_date=date.today().isoformat(),
             target_user=target,
-            guzis_positions=guzis_positions
+            guzis_positions=guzis_positions,
         )
         self._add_transaction(tx)
         return tx
@@ -362,7 +395,6 @@ class UserBlockchain(Blockchain):
 
 
 class CompanyBlockchain(Blockchain):
-
     def start(self, creator_pubkey, roles):
         """Return None
 
@@ -390,11 +422,19 @@ class CompanyBlockchain(Blockchain):
 
 
 class Block(Signable):
-
-    def __init__(self,
-            version=VERSION, close_date=None, previous_block_signature=None, merkle_root=None,
-            signer=None, balance=None, total=None,
-            b_transactions=None, b_engagements=None, signature=None):
+    def __init__(
+        self,
+        version=VERSION,
+        close_date=None,
+        previous_block_signature=None,
+        merkle_root=None,
+        signer=None,
+        balance=None,
+        total=None,
+        b_transactions=None,
+        b_engagements=None,
+        signature=None,
+    ):
         self.version = version
         self.close_date = date.fromisoformat(close_date) if close_date else None
         self.previous_block_signature = previous_block_signature
@@ -402,7 +442,11 @@ class Block(Signable):
         self.signer = signer
         self.balance = balance
         self.total = total
-        self.transactions = [Transaction(*umsgpack.unpackb(b_tx)) for b_tx in b_transactions] if b_transactions else []
+        self.transactions = (
+            [Transaction(*umsgpack.unpackb(b_tx)) for b_tx in b_transactions]
+            if b_transactions
+            else []
+        )
         self.engagements = []
         self.signature = signature
 
@@ -410,15 +454,22 @@ class Block(Signable):
 
     def __str__(self):
         return "v{} at {} by {}... [{},{}]".format(
-                self.version, self.close_date,
-                self.signer.hex()[:10] if self.signer else "unsigned",
-                self.balance, self.total)
+            self.version,
+            self.close_date,
+            self.signer.hex()[:10] if self.signer else "unsigned",
+            self.balance,
+            self.total,
+        )
 
     def __repr__(self):
         return self.__str__()
 
     def __eq__(self, other):
-        return other is not None and isinstance(other, Block) and self.pack() == other.pack()
+        return (
+            other is not None
+            and isinstance(other, Block)
+            and self.pack() == other.pack()
+        )
 
     def sign(self, pub, priv):
         """
@@ -471,7 +522,7 @@ class Block(Signable):
             self.balance,
             self.total,
             len(self.transactions),
-            len(self.engagements)
+            len(self.engagements),
         ]
 
     def as_full_list(self):
@@ -479,7 +530,7 @@ class Block(Signable):
         l += [
             [t.pack() for t in self.transactions],
             [e.pack() for e in self.engagements],
-            self.signature
+            self.signature,
         ]
         return l
 
@@ -494,8 +545,7 @@ class Block(Signable):
         return self.merkle_root
 
     def _merkle_root(self):
-        return self._tx_list_to_merkle_root(
-            [t.to_hash() for t in self.transactions])
+        return self._tx_list_to_merkle_root([t.to_hash() for t in self.transactions])
 
     def as_email(self):
         pass
@@ -504,14 +554,18 @@ class Block(Signable):
         if self._is_birthblock(owner):
             return is_valid_signature(owner, self.pack_for_hash(), self.signature)
         if self.is_signed():
-            return (is_valid_signature(self.signer, self.pack_for_hash(), self.signature)
-                    and self._has_valid_merkleroot())
+            return (
+                is_valid_signature(self.signer, self.pack_for_hash(), self.signature)
+                and self._has_valid_merkleroot()
+            )
         return True
 
     def _is_birthblock(self, owner):
-        return (self.merkle_root == EMPTY_HASH
-                and self.previous_block_signature == EMPTY_HASH
-                and self.signer == owner)
+        return (
+            self.merkle_root == EMPTY_HASH
+            and self.previous_block_signature == EMPTY_HASH
+            and self.signer == owner
+        )
 
     def _has_valid_merkleroot(self):
         return self._merkle_root() == self.merkle_root
@@ -529,17 +583,17 @@ class Block(Signable):
                 return hashlist[0]
         else:
             # [h0, h1, h2] => [h0, h1, h2, h2]
-            if len(hashlist) %2 == 1:
+            if len(hashlist) % 2 == 1:
                 hashlist.append(hashlist[-1])
             # [h0, h1, h2, h3] => [(h0, h1), (h2, h3)]
-            hash_pairs = [(hashlist[i], hashlist[i + 1])  
-                for i in range(0, len(hashlist), 2)]
-            new_hashlist = [self._hash_pair(h0, h1)
-                for h0, h1 in hash_pairs] 
+            hash_pairs = [
+                (hashlist[i], hashlist[i + 1]) for i in range(0, len(hashlist), 2)
+            ]
+            new_hashlist = [self._hash_pair(h0, h1) for h0, h1 in hash_pairs]
             return self._tx_list_to_merkle_root(new_hashlist, False)
 
     def _hash_pair(self, hash0, hash1):
-        return guzi_hash(hash0+hash1)
+        return guzi_hash(hash0 + hash1)
 
     def _contain_tx(self, tx):
         return tx in self.transactions
@@ -561,11 +615,8 @@ class Block(Signable):
 
 
 class BirthBlock(Block):
-
     def __init__(self, birthdate, new_user_pub_key, new_user_priv_key):
-        super().__init__(
-                close_date=birthdate,
-                signer=new_user_pub_key)
+        super().__init__(close_date=birthdate, signer=new_user_pub_key)
         self.previous_block_signature = EMPTY_HASH
         self.merkle_root = EMPTY_HASH
         self.sign(new_user_pub_key, new_user_priv_key)
@@ -586,8 +637,19 @@ class Transaction(Signable):
     PAY_ORDER = 0x14
     LEAVE_ORDER = 0x15
 
-    def __init__(self, version, tx_type, source, amount, tx_date=None,
-            target_company=None, target_user=None, guzis_positions=[], detail=None, signature=None):
+    def __init__(
+        self,
+        version,
+        tx_type,
+        source,
+        amount,
+        tx_date=None,
+        target_company=None,
+        target_user=None,
+        guzis_positions=[],
+        detail=None,
+        signature=None,
+    ):
         self.version = version
         self.tx_type = tx_type
         self.date = date.fromisoformat(tx_date) if tx_date else date.today()
@@ -602,24 +664,32 @@ class Transaction(Signable):
         self.packer = BytePacker()
 
     def __str__(self):
-        return "{}, {}, {}, {}, {}".format(self.tx_type, self.date, self.source.hex()[:10], self.amount, self.guzis_positions)
+        return "{}, {}, {}, {}, {}".format(
+            self.tx_type,
+            self.date,
+            self.source.hex()[:10],
+            self.amount,
+            self.guzis_positions,
+        )
 
     def __repr__(self):
         return self.__str__()
 
     def __eq__(self, other):
-        return (other is not None and
-                isinstance(other, Transaction) and
-                self.version == other.version and
-                self.tx_type == other.tx_type and
-                self.date == other.date and
-                self.source == other.source and
-                self.amount == other.amount and
-                self.target_company == other.target_company and
-                self.target_user == other.target_user and
-                self.guzis_positions == other.guzis_positions and
-                self.detail == other.detail and
-                self.signature == other.signature)
+        return (
+            other is not None
+            and isinstance(other, Transaction)
+            and self.version == other.version
+            and self.tx_type == other.tx_type
+            and self.date == other.date
+            and self.source == other.source
+            and self.amount == other.amount
+            and self.target_company == other.target_company
+            and self.target_user == other.target_user
+            and self.guzis_positions == other.guzis_positions
+            and self.detail == other.detail
+            and self.signature == other.signature
+        )
 
     def as_list(self):
         return [

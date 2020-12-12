@@ -1,5 +1,4 @@
 class Company:
-
     def __init__(self, company_pubkey, my_pubkey):
         pass
 

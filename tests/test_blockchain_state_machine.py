@@ -1,29 +1,41 @@
-from hypothesis.stateful import RuleBasedStateMachine, rule, invariant, initialize, precondition
-from hypothesis import note, strategies as st
-from tests.test_blockchain import KEY_POOL
-from guzilib.blockchain import *
 from datetime import date, timedelta
+
+from hypothesis import note
+from hypothesis import strategies as st
+from hypothesis.stateful import (
+    RuleBasedStateMachine,
+    initialize,
+    invariant,
+    precondition,
+    rule,
+)
+
+from guzilib.blockchain import *
+from tests.test_blockchain import KEY_POOL
+
 
 class UserBlockchainStateMachine(RuleBasedStateMachine):
     """This class runs tests to simulate random usages of Blockchain.
     It relies on hypothesis which allows to create rules. Each rule simulates
     one behavious of the Blockchain (creating guzis, making a payment, etc)
-    At the end of the simulation, checks all methods having the @invariant() 
+    At the end of the simulation, checks all methods having the @invariant()
     decorator
     """
 
     bc = None
-    
-    @initialize(birthdate=st.dates(),
-            my_key_pair=st.sampled_from(KEY_POOL),
-            ref_key_pair=st.sampled_from(KEY_POOL))
+
+    @initialize(
+        birthdate=st.dates(),
+        my_key_pair=st.sampled_from(KEY_POOL),
+        ref_key_pair=st.sampled_from(KEY_POOL),
+    )
     def init_blockchain(self, birthdate, my_key_pair, ref_key_pair):
         """Created a validated Blockchain and initialize some control
         attributes
         """
-        self.bc = UserBlockchain(my_key_pair['pub'])
-        self.bc.start(birthdate.isoformat(), my_key_pair['priv'], ref_key_pair['pub'])
-        self.bc.validate(ref_key_pair['priv'], birthdate)
+        self.bc = UserBlockchain(my_key_pair["pub"])
+        self.bc.start(birthdate.isoformat(), my_key_pair["priv"], ref_key_pair["pub"])
+        self.bc.validate(ref_key_pair["priv"], birthdate)
         self.bc.new_block()
 
         self.guzis = 1
@@ -51,7 +63,7 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
     def pay_to(self, target_user, amount):
         """Simulates a payment to another user."""
         try:
-            self.bc.pay_to_user(target_user['pub'], amount)
+            self.bc.pay_to_user(target_user["pub"], amount)
             self.guzis -= amount
         except (InsufficientFundsError, NegativeAmountError):
             pass
@@ -63,5 +75,6 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
         assert self.guzis >= 0
         note(self.bc._get_available_guzis())
         assert self.guzis == self.bc._get_available_guzis_amount()
+
 
 UserBlockchainTests = UserBlockchainStateMachine.TestCase

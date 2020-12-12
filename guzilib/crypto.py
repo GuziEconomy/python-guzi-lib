@@ -1,8 +1,10 @@
-import itertools
 import hashlib
+import itertools
+
 import ecdsa
 
 EMPTY_HASH = 0
+
 
 class Packable:
     def pack_for_hash(self):
@@ -10,7 +12,6 @@ class Packable:
 
 
 class Signable(Packable):
-
     def to_hash(self):
         return guzi_hash(self.pack_for_hash())
 
@@ -55,13 +56,13 @@ def zip_positions(positions):
     # 1. [('2020-12-22',0),('2020-12-22',1),('2020-12-23',0),('2020-12-23',1)]
     # => [(['2020-12-22'], [0, 1]), (['2020-12-23'], [0, 1])]
     tmp_result = []
-    for key, group in itertools.groupby(positions, lambda x: x[0] ): 
+    for key, group in itertools.groupby(positions, lambda x: x[0]):
         tmp_result += [(key, [g[1] for g in group])]
 
     # 2. [(['2020-12-22'], [0, 1]), (['2020-12-23'], [0, 1])]
     # => [(['2020-12-22', '2020-12-23'], [0, 1])]
     result = []
-    for key, group in itertools.groupby(tmp_result, lambda x: x[1]): 
+    for key, group in itertools.groupby(tmp_result, lambda x: x[1]):
         result += [([g[0] for g in group], key)]
 
     return result
