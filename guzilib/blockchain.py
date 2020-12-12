@@ -1,8 +1,6 @@
 import itertools
 from datetime import date
-from enum import Enum
 
-import pytz
 import umsgpack
 
 from guzilib.crypto import (
@@ -526,13 +524,13 @@ class Block(Signable):
         ]
 
     def as_full_list(self):
-        l = self.as_list()[:-2]
-        l += [
+        res = self.as_list()[:-2]
+        res += [
             [t.pack() for t in self.transactions],
             [e.pack() for e in self.engagements],
             self.signature,
         ]
-        return l
+        return res
 
     def pack_for_hash(self):
         return self.packer.pack_block_without_hash(self)
@@ -705,9 +703,9 @@ class Transaction(Signable):
         ]
 
     def as_full_list(self):
-        l = self.as_list()
-        l.append(self.signature)
-        return l
+        res = self.as_list()
+        res.append(self.signature)
+        return res
 
     def pack_for_hash(self):
         return self.packer.pack_transaction_without_hash(self)

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from hypothesis import note
 from hypothesis import strategies as st
@@ -10,7 +10,8 @@ from hypothesis.stateful import (
     rule,
 )
 
-from guzilib.blockchain import *
+from guzilib.blockchain import UserBlockchain
+from guzilib.errors import InsufficientFundsError, NegativeAmountError
 from tests.test_blockchain import KEY_POOL
 
 
