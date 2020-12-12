@@ -151,7 +151,7 @@ class TestUserBlockchainPayToUser:
                 amount=2,
                 tx_date=date(2011,12,15).isoformat(), 
                 target_user=REF_PUB_KEY,
-                guzis_positions=[('2011-12-13', 0), ('2011-12-14', 0)])
+                guzis_positions=[(['2011-12-13', '2011-12-14'], [0])])
         
         assert result == expected_tx
     
@@ -349,9 +349,7 @@ class TestBlockchainReduceToDate:
         blockchain = make_blockchain(start=date(2000,1,1), days=4, tx_per_block=1, end_with_empty_block=True)
 
         # Act
-        print(blockchain)
         result = blockchain._reduce_to_date(date(2000, 1, 5))
-        print(result)
 
         # Assert
         assert len(result) == 1
@@ -524,23 +522,6 @@ class TestBlockchainGetAvailableGuzis:
         # Assert
         assert expected == result
 
-class TestUserBlockchainSpendGuzisFromAvailables:
-
-    @freeze_time("2011-12-13", auto_tick_seconds=60*60*24)
-    def test_remove_older_guzis(self):
-        blockchain = UserBlockchain(NEW_USER_PUB_KEY)
-        blockchain.new_block()
-        blockchain[0].total = 4**3
-        blockchain.make_daily_guzis()
-
-        blockchain._spend_guzis_from_availables(blockchain._get_available_guzis(), 3)
-        expected = [
-            ("2011-12-13", 3),
-            ("2011-12-13", 4),
-        ]
-
-        assert expected == blockchain._get_available_guzis()
-
 
 class TestBlockchainMakeDailyGuzis:
 
@@ -710,9 +691,6 @@ class TestBlockchainFindTransaction:
 
         # Act
         result = blockchain._find_transaction(blockchain[2].transactions[0])
-        for block in blockchain:
-            print(block)
-            print(block.transactions)
 
         # Assert
         assert result == blockchain[2]
@@ -866,12 +844,11 @@ class TestBLockchainIsValid:
     def test_change_transactions_after_signed_ko(self):
         bc = make_blockchain(days=4, tx_per_block=4)
         bc[0].transactions[0].amount = 12
-        print(bc[0].transactions[0], bc[0].is_signed())
 
         result = bc.is_valid()
 
         assert result is False
-
+        
 
 class TestBlockContains:
 

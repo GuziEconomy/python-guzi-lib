@@ -1,10 +1,11 @@
 import umsgpack
-from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH, is_valid_signature
+from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH, is_valid_signature, zip_positions
 from guzilib.packer import BytePacker
 from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
 import pytz
 from datetime import date
 from enum import Enum
+import itertools
 
 VERSION = 1
 MAX_TX_IN_BLOCK = 30
@@ -14,8 +15,6 @@ class Blockchain(list):
     def __init__(self, pubkey):
         self.pubkey = pubkey
         self.packer = BytePacker()
-        self.last_spend_date = None
-        self.last_spend_guzi = None
 
     def __eq__(self, other):
         if other is None:
@@ -173,8 +172,6 @@ class UserBlockchain(Blockchain):
         init_block.balance = 0
         init_block.total = 0
         init_block.close_date = dt or date.today()
-        init_block.guzi_index = (init_block.close_date.isoformat(), 0)
-        init_block.guza_index = (init_block.close_date.isoformat(), 0)
         self.make_daily_guzis(dt)
         self.make_daily_guzas(dt)
         init_block.compute_merkle_root()
@@ -205,8 +202,6 @@ class UserBlockchain(Blockchain):
         if self._contain_transaction(tx):
             return
         self._add_transaction(tx)
-        if self.last_spend_date is None:
-            self.last_spend_date = dt
         return self[0].transactions[0]
 
     def make_daily_guzas(self, dt=None):
@@ -231,9 +226,13 @@ class UserBlockchain(Blockchain):
         """
         if amount < 0:
             raise NegativeAmountError
+        if amount == 0:
+            return
         if amount > self._get_available_guzis_amount():
             raise InsufficientFundsError
         guzis_positions = self._get_available_guzis()
+        guzis_positions = guzis_positions[:amount]
+        guzis_positions = zip_positions(guzis_positions)
         tx = Transaction(
             VERSION,
             Transaction.PAYMENT,
@@ -243,7 +242,6 @@ class UserBlockchain(Blockchain):
             target_user=target,
             guzis_positions=guzis_positions
         )
-        self._spend_guzis_from_availables(guzis_positions, amount)
         self._add_transaction(tx)
         return tx
 
@@ -260,20 +258,24 @@ class UserBlockchain(Blockchain):
         pass
 
     def _get_available_guzis(self):
-        """Return amount number of first available Guzis
-
-        If amount=-1, return all available guzis
+        """Return list of available Guzis
         """
-        guzis = []
-        for block in self:
-            guzis += block._guzis()
-
-        guzis = unzip_positions(guzis)
-        if self.last_spend_date is not None and self.last_spend_guzi is not None:
-            for i, g in list(enumerate(guzis)):
-                if date.fromisoformat(g[0]) == self.last_spend_date and g[1] == self.last_spend_guzi:
-                    return guzis[i+1:]
-        return guzis
+        res = []
+        txs = itertools.chain.from_iterable([b.transactions for b in self])
+        last_spend = None
+        for tx in txs:
+            if tx.tx_type == Transaction.GUZI_CREATE:
+                guzis = unzip_positions(tx.guzis_positions)
+                if last_spend is not None and last_spend in guzis:
+                    res += [g for g in guzis if g > last_spend]
+                    return sorted(res)
+                else:
+                    res += guzis
+            elif tx.tx_type == Transaction.PAYMENT and last_spend is None:
+                guzis = unzip_positions(tx.guzis_positions)
+                if len(guzis) > 0:
+                    last_spend = guzis[-1]
+        return sorted(res)
 
 
     def _get_available_guzis_amount(self):
@@ -282,16 +284,6 @@ class UserBlockchain(Blockchain):
 
         """
         return len(self._get_available_guzis())
-
-    def _spend_guzis_from_availables(self, available_guzis, amount):
-        """Update last_spend_guzi and last_spend_date
-
-        depending on given available_guzis
-        """
-        if amount == 0:
-            return
-        self.last_spend_date = date.fromisoformat(available_guzis[amount-1][0])
-        self.last_spend_guzi = available_guzis[amount-1][1]
 
 
 class CompanyBlockchain(Blockchain):
@@ -326,15 +318,13 @@ class Block(Signable):
 
     def __init__(self,
             version=VERSION, close_date=None, previous_block_signature=None, merkle_root=None,
-            signer=None, guzi_index=None, guza_index=None, balance=None, total=None,
+            signer=None, balance=None, total=None,
             b_transactions=None, b_engagements=None, signature=None):
         self.version = version
         self.close_date = date.fromisoformat(close_date) if close_date else None
         self.previous_block_signature = previous_block_signature
         self.merkle_root = merkle_root
         self.signer = signer
-        self.guzi_index = guzi_index
-        self.guza_index = guza_index
         self.balance = balance
         self.total = total
         self.transactions = [Transaction(*umsgpack.unpackb(b_tx)) for b_tx in b_transactions] if b_transactions else []
@@ -344,10 +334,10 @@ class Block(Signable):
         self.packer = BytePacker()
 
     def __str__(self):
-        return "v{} at {} by {}... [{},{},{},{}]".format(
+        return "v{} at {} by {}... [{},{}]".format(
                 self.version, self.close_date,
                 self.signer.hex()[:10] if self.signer else "unsigned",
-                self.guzi_index, self.guza_index, self.balance, self.total)
+                self.balance, self.total)
 
     def __repr__(self):
         return self.__str__()
@@ -389,8 +379,6 @@ class Block(Signable):
             self.previous_block_signature,
             self.merkle_root,
             self.signer,
-            self.guzi_index, 
-            self.guza_index,
             self.balance,
             self.total,
             len(self.transactions),
