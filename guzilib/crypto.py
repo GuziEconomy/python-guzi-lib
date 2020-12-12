@@ -15,9 +15,11 @@ class Signable(Packable):
         return guzi_hash(self.pack_for_hash())
 
     def sign(self, privkey):
-        """
-        privkey : int
-        return bytes
+        """Set the instance signature with given private key.
+
+        privkey : bytes
+
+        :returns: bytes
         """
         sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
         self.signature = sk.sign(self.pack_for_hash())
@@ -25,6 +27,14 @@ class Signable(Packable):
 
 
 def is_valid_signature(pubkey, data, signature):
+    """Return True if given data from given pubkey has a valid signature
+
+    pubkey : bytes
+    data : bytes
+    signature : bytes
+
+    :returns: bool
+    """
     try:
         vk = ecdsa.VerifyingKey.from_string(pubkey, curve=ecdsa.SECP256k1)
         vk.verify(signature, data)
@@ -38,7 +48,11 @@ def guzi_hash(data):
 
 
 def zip_positions(positions):
-    # 1. [("2020-12-22",0),("2020-12-22",1),("2020-12-23",0),("2020-12-23",1)]
+    """
+    From [('2020-12-22',0),('2020-12-23',0),('2020-12-23',1),('2020-12-24',0)]
+    To   [(['2020-12-22'], [0]),(['2020-12-23'], [0, 1]),(['2020-12-24'], [0])]
+    """
+    # 1. [('2020-12-22',0),('2020-12-22',1),('2020-12-23',0),('2020-12-23',1)]
     # => [(['2020-12-22'], [0, 1]), (['2020-12-23'], [0, 1])]
     tmp_result = []
     for key, group in itertools.groupby(positions, lambda x: x[0] ): 
@@ -56,7 +70,7 @@ def zip_positions(positions):
 def unzip_positions(positions):
     """
     From [(['2020-12-22'], [0]),(['2020-12-23'], [0, 1]),(['2020-12-24'], [0])]
-    To   [("2020-12-22",0),("2020-12-23",0),("2020-12-23",1),("2020-12-24",0)]
+    To   [('2020-12-22',0),('2020-12-23',0),('2020-12-23',1),('2020-12-24',0)]
     """
     result = []
     for p in positions:

@@ -318,43 +318,6 @@ class TestBlockchainReduce:
         assert len(result) == 1
 
 
-class TestBlockchainReduceToDate:
-
-    @freeze_time("2011-12-13", tick=True)
-    def test_return_total_blockchain_for_old_date(self):
-        
-        # Arrange
-        blockchain = make_blockchain(start=date(2000,1,1), days=4, tx_per_block=1)
-
-        # Act
-        result = blockchain._reduce_to_date(date(1994, 1, 1))
-
-        # Assert
-        assert len(result) == len(blockchain)
-
-    def test_return_only_block_after_date(self):
-        
-        # Arrange
-        blockchain = make_blockchain(start=date(2000,1,1), days=4, tx_per_block=1)
-
-        # Act
-        result = blockchain._reduce_to_date(date(2000, 1, 2))
-
-        # Assert
-        assert len(result) == 3
-
-    def test_return_last_block_for_later_date(self):
-        
-        # Arrange
-        blockchain = make_blockchain(start=date(2000,1,1), days=4, tx_per_block=1, end_with_empty_block=True)
-
-        # Act
-        result = blockchain._reduce_to_date(date(2000, 1, 5))
-
-        # Assert
-        assert len(result) == 1
-
-
 class TestBlockchainSignLastBlock:
 
     def test_basic_ok(self):
@@ -680,7 +643,7 @@ class TestBlockchainFindTransaction:
         blockchain = make_blockchain()
 
         # Act
-        result = blockchain._find_transaction(random_transaction())
+        result = blockchain._find_tx(random_transaction())
 
         # Assert
         assert result is None
@@ -690,7 +653,7 @@ class TestBlockchainFindTransaction:
         blockchain = make_blockchain(days=2, tx_per_block=1)
 
         # Act
-        result = blockchain._find_transaction(blockchain[2].transactions[0])
+        result = blockchain._find_tx(blockchain[2].transactions[0])
 
         # Assert
         assert result == blockchain[2]
@@ -723,7 +686,7 @@ class TestBlockchainRefuseTransaction:
         assert refusal.guzis_positions == []
         assert refusal.detail == refused.signature
 
-    def test_remove_transaction_from_last_block(self):
+    def test_remove_tx_from_last_block(self):
         # Arrange
         blockchain = Blockchain(NEW_USER_PUB_KEY)
         blockchain.new_block()
@@ -773,7 +736,7 @@ class TestBlockchainContainTransaction:
 
 
         # Assert
-        assert bc._contain_transaction(bc[2].transactions[0]) is True
+        assert bc._contain_tx(bc[2].transactions[0]) is True
 
     def test_transaction_not_found(self):
         # Arrange
@@ -782,7 +745,7 @@ class TestBlockchainContainTransaction:
 
 
         # Assert
-        assert bc._contain_transaction(random_transaction()) is False
+        assert bc._contain_tx(random_transaction()) is False
 
 
 class TestBLockchainIsValid:
@@ -864,9 +827,9 @@ class TestBlockContains:
         b.add_transactions([tx0, tx1, tx2])
 
         # Assert
-        assert b._contain_transaction(tx0) is True
-        assert b._contain_transaction(tx1) is True
-        assert b._contain_transaction(tx2) is True
+        assert b._contain_tx(tx0) is True
+        assert b._contain_tx(tx1) is True
+        assert b._contain_tx(tx2) is True
 
 
     def test_transaction_not_found(self):
@@ -881,7 +844,7 @@ class TestBlockContains:
         b.add_transactions([tx1, tx2])
 
         # Assert
-        assert b._contain_transaction(tx0) is False
+        assert b._contain_tx(tx0) is False
 
 
 class TestBlockContainUser:

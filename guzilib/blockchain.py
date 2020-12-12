@@ -1,11 +1,12 @@
-import umsgpack
-from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH, is_valid_signature, zip_positions
-from guzilib.packer import BytePacker
-from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
+import itertools
 import pytz
+import umsgpack
 from datetime import date
 from enum import Enum
-import itertools
+
+from guzilib.crypto import guzi_hash, Signable, unzip_positions, EMPTY_HASH, is_valid_signature, zip_positions
+from guzilib.errors import FullBlockError, NegativeAmountError, UnsignedPreviousBlockError, InsufficientFundsError, InvalidBlockchainError, NotRemovableTransactionError
+from guzilib.packer import BytePacker
 
 VERSION = 1
 MAX_TX_IN_BLOCK = 30
@@ -42,20 +43,38 @@ class Blockchain(list):
         pass
 
     def load_from_file(self, infile):
+        """Load data from given file into the instance
+
+        :returns: None
+        """
         hashed_blocks = umsgpack.unpack(infile)
         self._from_hashed_blocks(hashed_blocks)
 
     def load_from_bytes(self, b):
+        """Load data from given bytes into the instance
+
+        :returns: None
+        """
         hashed_blocks = umsgpack.unpackb(b)
         self._from_hashed_blocks(hashed_blocks)
 
-    def _find_transaction(self, transaction):
+    def _find_tx(self, tx):
+        """Return the block containing given transaction
+        Return None if transaction was not found
+
+        :returns: Block or None
+        """
         for block in self:
-            if block._contain_transaction(transaction):
+            if block._contain_tx(tx):
                 return block
         return None
 
     def new_block(self):
+        """Create a new Block and add it to the Blockchain
+        Previous block must be signed.
+
+        :returns: None
+        """
         if len(self) > 0 and not self[0].is_signed():
             raise UnsignedPreviousBlockError
         block = Block()
@@ -80,20 +99,28 @@ class Blockchain(list):
         Return refusal transaction if blockchain is invalid
 
         Must check which tx_type transaction is to decide what to do with it.
+
+        :returns: Transaction or None
         """
         pass
 
-    def _add_transaction(self, transaction):
-        assert(isinstance(transaction, Transaction))
-        self[0].add_transaction(transaction)
+    def _add_transaction(self, tx):
+        """Add given transaction to the instance
+
+        :returns: None
+        """
+        assert(isinstance(tx, Transaction))
+        self[0].add_transaction(tx)
 
     def refuse_transaction(self, transaction):
         """Return a refusal transaction
 
-        If transaction was already added, remove it from current block.
-        If transaction was already sealed, raise Error
+        If Transaction was already added, remove it from current block.
+        If Transaction is in a signed Block, raise Error
+
+        :returns: Transaction
         """
-        block_with_tx = self._find_transaction(transaction)
+        block_with_tx = self._find_tx(transaction)
         if block_with_tx is None:
             pass
         elif block_with_tx != self[0]:
@@ -101,7 +128,7 @@ class Blockchain(list):
         else:
             if self[0].is_signed():
                 raise NotRemovableTransactionError
-            self[0]._remove_transaction(transaction)
+            self[0]._remove_tx(transaction)
         return Transaction(VERSION, Transaction.REFUSAL,
                 source=transaction.target_user,
                 amount=transaction.amount,
@@ -110,10 +137,10 @@ class Blockchain(list):
                 detail=transaction.signature)
 
     def is_valid(self):
-        """Return boolean
-
-        True if given blockchain seems valid
+        """Return True if given blockchain seems valid
         False if an incoherence was detected
+
+        :returns: bool
         """
         if len(self) == 0:
             return True
@@ -123,43 +150,71 @@ class Blockchain(list):
         return True
 
     def sign_last_block(self, pubkey, privkey):
+        """Sign last Block of the Blockchain with given privkey
+
+        :returns: None
+        """
         self[0].close_date = date.today()
         self[0].sign(pubkey, privkey)
 
     def _reduce(self, pubkey):
+        """Reduce the Blockchain to the minimum size depending on target user
+
+        If target user already had a Transaction with me, then I do not need to
+        send him all my Blockchain, but only the part between now and the 
+        previous Transaction we had together.
+
+        :returns: List
+        """
         for index, block in list(enumerate(self)):
             if block._containUser(pubkey):
                 return self[:index+1]
         return self
 
-    def _reduce_to_date(self, date):
-        for index, block in list(enumerate(self)):
-            if block.close_date is not None and block.close_date < date:
-                return self[:index]
-        return self
-
     def _from_hashed_blocks(self, hashed_blocks):
+        """Append Blocks created from given hashed_blocks.
+
+        :returns: None
+
+        """
         for b in hashed_blocks:
             block_as_list = umsgpack.unpackb(b)
             block = Block(*block_as_list)
             self.append(block)
 
-    def _contain_transaction(self, tx):
-        """Return True if transaction already in the blockchain
+    def _contain_tx(self, tx):
+        """Return True if transaction is already in the blockchain
 
-        :tx: TODO
-        :returns: TODO
+        :tx: Transaction we're looking for
+        :returns: bool
 
         """
         for b in self:
-            if b._contain_transaction(tx):
+            if b._contain_tx(tx):
                 return True
         return False
 
 
 class UserBlockchain(Blockchain):
 
+    def __init__(self, pubkey):
+        super().__init__(pubkey)
+        self.available_guzis = None
+
+    def _add_transaction(self, transaction):
+        super()._add_transaction(transaction)
+        self.guzis_positions = None
+
     def start(self, birthdate, my_privkey, ref_pubkey):
+        """Create a new blockchain. This blockchain won't be usable to pay or 
+        create guzis while it has not been validated by a referent.
+
+        :birthdate: datetime.date The date of birth of new user
+        :my_privkey: bytes New user private key
+        :my_pubkey: bytes New user public key
+        :returns: None
+
+        """
         self.clear()
         self.insert(0, BirthBlock(birthdate, self.pubkey, my_privkey))
         init_block = Block(
@@ -168,6 +223,11 @@ class UserBlockchain(Blockchain):
         self.insert(0, init_block)
 
     def validate(self, ref_privkey, dt=None):
+        """Validate a newly created blockchain. This method should be called by
+        Referent to certify user blockchain
+
+        :returns: None
+        """
         init_block = self[0]
         init_block.balance = 0
         init_block.total = 0
@@ -178,6 +238,10 @@ class UserBlockchain(Blockchain):
         init_block.sign(init_block.signer, ref_privkey)
 
     def _get_guzis_amount(self):
+        """Return total guzis user can create each day.
+
+        :returns: int
+        """
         n = self[0].total
         if n < 0:
             raise InvalidBlockchainError("Total can never be negative")
@@ -194,12 +258,15 @@ class UserBlockchain(Blockchain):
         Guzis. This transaction only contains date, user id and the amount of
         created guzis.
         A user must create (total)^(1/3)+1 Guzis/day (rounded down)
+
+        :dt: datetime.date To override "Today" for creation date
+        :returns: Transaction
         """
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzis = [[[dt.isoformat()], list(range(amount))]]
         tx = Transaction(VERSION, Transaction.GUZI_CREATE, self.pubkey, amount, tx_date=dt.isoformat(), guzis_positions=guzis)
-        if self._contain_transaction(tx):
+        if self._contain_tx(tx):
             return
         self._add_transaction(tx)
         return self[0].transactions[0]
@@ -212,6 +279,9 @@ class UserBlockchain(Blockchain):
         Guzas. This transaction only contains date, user id and the amount of
         created guzas.
         A user must create (total)^(1/3)+1 Guzas/day (rounded down)
+
+        :dt: datetime.date To override "Today" for creation date
+        :returns: Transaction
         """
         amount = self._get_guzis_amount()
         dt = dt or date.today()
@@ -220,9 +290,12 @@ class UserBlockchain(Blockchain):
         return self[0].transactions[0]
 
     def pay_to_user(self, target, amount):
-        """Return Transaction to pay given target with amount Guzis
+        """Return Transaction to pay given target with given amount of Guzis
 
         Also add this Transaction to itself
+        Return None and add no Transaction if amount == 0
+
+        :returns: Transaction or None
         """
         if amount < 0:
             raise NegativeAmountError
@@ -230,9 +303,7 @@ class UserBlockchain(Blockchain):
             return
         if amount > self._get_available_guzis_amount():
             raise InsufficientFundsError
-        guzis_positions = self._get_available_guzis()
-        guzis_positions = guzis_positions[:amount]
-        guzis_positions = zip_positions(guzis_positions)
+        guzis_positions = zip_positions(self._get_available_guzis()[:amount])
         tx = Transaction(
             VERSION,
             Transaction.PAYMENT,
@@ -259,7 +330,12 @@ class UserBlockchain(Blockchain):
 
     def _get_available_guzis(self):
         """Return list of available Guzis
+        with unziped format (see unzip_positions)
+
+        :returns: list(tuple("iso_date", int))
         """
+        if self.available_guzis is not None:
+            return self.available_guzis
         res = []
         txs = itertools.chain.from_iterable([b.transactions for b in self])
         last_spend = None
@@ -277,11 +353,10 @@ class UserBlockchain(Blockchain):
                     last_spend = guzis[-1]
         return sorted(res)
 
-
     def _get_available_guzis_amount(self):
-        """Return the total number of Guzis spendable
-        :returns: TODO
+        """Return the total number of spendable Guzis
 
+        :returns: int
         """
         return len(self._get_available_guzis())
 
@@ -309,7 +384,7 @@ class CompanyBlockchain(Blockchain):
         """Return Transaction"""
         pass
 
-    def refuse_transaction(self, transaction):
+    def refuse_transaction(self, tx):
         """Return Transaction"""
         pass
 
@@ -346,11 +421,21 @@ class Block(Signable):
         return other is not None and isinstance(other, Block) and self.pack() == other.pack()
 
     def sign(self, pub, priv):
+        """
+        pub : bytes
+        priv : bytes
+
+        :returns: bytes
+        """
         self.signer = pub
         self.compute_merkle_root()
         return super().sign(priv)
 
     def add_transaction(self, tx):
+        """Add given transaction to the instance transactions pool
+
+        :returns: None
+        """
         if self.is_signed():
             raise FullBlockError
         if len(self.transactions) >= MAX_TX_IN_BLOCK:
@@ -358,8 +443,12 @@ class Block(Signable):
         if tx not in self.transactions:
             self.transactions.insert(0, tx)
 
-    def add_transactions(self, tx):
-        for t in tx:
+    def add_transactions(self, txs):
+        """Add given transactions to the instance transactions pool
+
+        :returns: None
+        """
+        for t in txs:
             self.add_transaction(t)
 
     def find_transaction(self, tx_type, date):
@@ -452,11 +541,11 @@ class Block(Signable):
     def _hash_pair(self, hash0, hash1):
         return guzi_hash(hash0+hash1)
 
-    def _contain_transaction(self, transaction):
-        return transaction in self.transactions
+    def _contain_tx(self, tx):
+        return tx in self.transactions
 
-    def _remove_transaction(self, transaction):
-        self.transactions.remove(transaction)
+    def _remove_tx(self, tx):
+        self.transactions.remove(tx)
 
     def _containUser(self, pubkey):
         for t in self.transactions:
