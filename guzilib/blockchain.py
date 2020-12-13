@@ -698,7 +698,7 @@ class Transaction(Signable):
         return res
 
     def pack_for_hash(self):
-        return self.packer.pack_transaction_without_hash(self)
+        return self.packer.pack_tx_without_hash(self)
 
     def pack(self):
-        return self.packer.pack_transaction(self)
+        return self.packer.pack_tx(self)

@@ -2,10 +2,10 @@ import umsgpack
 
 
 class Packer:
-    def pack_transaction(self, transaction):
+    def pack_tx(self, transaction):
         return NotImplemented
 
-    def pack_transaction_without_hash(self, transaction):
+    def pack_tx_without_hash(self, transaction):
         return NotImplemented
 
     def pack_block(self, block):
@@ -19,10 +19,10 @@ class Packer:
 
 
 class BytePacker(Packer):
-    def pack_transaction(self, transaction):
+    def pack_tx(self, transaction):
         return umsgpack.packb(transaction.as_full_list())
 
-    def pack_transaction_without_hash(self, transaction):
+    def pack_tx_without_hash(self, transaction):
         return umsgpack.packb(transaction.as_list())
 
     def pack_block(self, block):
