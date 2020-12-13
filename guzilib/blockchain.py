@@ -33,15 +33,14 @@ class Blockchain(list):
     def __eq__(self, other):
         if other is None:
             return False
-        if isinstance(other, Blockchain):
-            if len(self) != len(other):
-                return False
-            for b1, b2 in zip(self, other):
-                if b1 != b2:
-                    return False
-            return True
-        else:
+        if not isinstance(other, Blockchain):
             return False
+        if len(self) != len(other):
+            return False
+        for b1, b2 in zip(self, other):
+            if b1 != b2:
+                return False
+        return True
 
     def save_to_file(self, outfile):
         """
@@ -51,9 +50,6 @@ class Blockchain(list):
 
     def pack(self):
         return self.packer.pack_bloockchain(self)
-
-    def as_email(self):
-        pass
 
     def load_from_file(self, infile):
         """Load data from given file into the instance
@@ -158,6 +154,7 @@ class Blockchain(list):
 
         :returns: bool
         """
+        # TODO : Really ? len == 0 should be alerting...
         if len(self) == 0:
             return True
         for b in self:
@@ -288,6 +285,7 @@ class UserBlockchain(Blockchain):
             tx_date=dt.isoformat(),
             guzis_positions=guzis,
         )
+        # TODO : Warning here cause tx would be different (i.e signature random)
         if self._contain_tx(tx):
             return
         self._add_transaction(tx)
@@ -545,9 +543,6 @@ class Block(Signable):
     def _merkle_root(self):
         return self._tx_list_to_merkle_root([t.to_hash() for t in self.transactions])
 
-    def as_email(self):
-        pass
-
     def is_valid(self, owner):
         if self._is_birthblock(owner):
             return is_valid_signature(owner, self.pack_for_hash(), self.signature)
@@ -559,6 +554,7 @@ class Block(Signable):
         return True
 
     def _is_birthblock(self, owner):
+        # TODO :use BirthBlock instance on Blockchain load instead 
         return (
             self.merkle_root == EMPTY_HASH
             and self.previous_block_signature == EMPTY_HASH
@@ -604,12 +600,6 @@ class Block(Signable):
             if pubkey in (t.target_user, t.target_company, t.source):
                 return True
         return False
-
-    def _guzis(self):
-        result = []
-        for tx in self.transactions:
-            result += tx._guzis()
-        return result
 
 
 class BirthBlock(Block):
@@ -712,11 +702,3 @@ class Transaction(Signable):
 
     def pack(self):
         return self.packer.pack_transaction(self)
-
-    def as_email(self):
-        pass
-
-    def _guzis(self):
-        if self.tx_type == Transaction.GUZI_CREATE:
-            return self.guzis_positions
-        return []
