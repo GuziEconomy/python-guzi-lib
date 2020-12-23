@@ -5,7 +5,7 @@ import umsgpack
 
 from guzilib.crypto import (
     EMPTY_HASH,
-    Signable,
+    Packable,
     guzi_hash,
     is_valid_signature,
     unzip_positions,
@@ -13,6 +13,7 @@ from guzilib.crypto import (
 )
 from guzilib.errors import (
     FullBlockError,
+    GuziError,
     InsufficientFundsError,
     InvalidBlockchainError,
     NegativeAmountError,
@@ -51,7 +52,7 @@ class Blockchain(list):
     def pack(self):
         return self.packer.pack_bloockchain(self)
 
-    def load_from_file(self, infile):
+    def from_file(self, infile):
         """Load data from given file into the instance
 
         :returns: None
@@ -59,7 +60,7 @@ class Blockchain(list):
         hashed_blocks = umsgpack.unpack(infile)
         self._from_hashed_blocks(hashed_blocks)
 
-    def load_from_bytes(self, b):
+    def from_bytes(self, b):
         """Load data from given bytes into the instance
 
         :returns: None
@@ -84,7 +85,7 @@ class Blockchain(list):
 
         :returns: None
         """
-        if len(self) > 0 and not self[0].is_signed():
+        if len(self) > 0 and not self.last_block().is_signed():
             raise UnsignedPreviousBlockError
         block = Block()
         if len(self) > 0:
@@ -116,20 +117,28 @@ class Blockchain(list):
     def _add_transaction(self, tx):
         """Add given transaction to the instance
 
+        :tx: Transaction to add
         :returns: None
         """
         assert isinstance(tx, Transaction)
+
+        if tx.tx_type == Transaction.GUZI_CREATE and self._contain_close_tx(tx):
+            raise GuziError
+
+        if len(self) == 0:
+            self.new_block()
         self[0].add_transaction(tx)
 
-    def refuse_transaction(self, transaction):
+    def refuse_transaction(self, tx):
         """Return a refusal transaction
 
         If Transaction was already added, remove it from current block.
         If Transaction is in a signed Block, raise Error
 
+        :tx: Transaction to refuse
         :returns: Transaction
         """
-        block_with_tx = self._find_tx(transaction)
+        block_with_tx = self._find_tx(tx)
         if block_with_tx is None:
             pass
         elif block_with_tx != self[0]:
@@ -137,38 +146,36 @@ class Blockchain(list):
         else:
             if self[0].is_signed():
                 raise NotRemovableTransactionError
-            self[0]._remove_tx(transaction)
+            self[0]._remove_tx(tx)
         return Transaction(
             VERSION,
             Transaction.REFUSAL,
-            source=transaction.target_user,
-            amount=transaction.amount,
+            signer=tx.target_user,
+            amount=tx.amount,
             tx_date=date.today().isoformat(),
-            target_user=transaction.source,
-            detail=transaction.signature,
+            target_user=tx.signer,
+            detail=tx.signature,
         )
 
     def is_valid(self):
-        """Return True if given blockchain seems valid
+        """Return True if blockchain seems valid
         False if an incoherence was detected
 
         :returns: bool
         """
-        # TODO : Really ? len == 0 should be alerting...
         if len(self) == 0:
-            return True
+            return False
         for b in self:
-            if not b.is_valid(self.pubkey):
+            if not b.is_valid():
                 return False
         return True
 
-    def sign_last_block(self, pubkey, privkey):
-        """Sign last Block of the Blockchain with given privkey
+    def last_block(self):
+        """Return the last in use block of the blockchain
 
-        :returns: None
+        :returns: Block
         """
-        self[0].close_date = date.today()
-        self[0].sign(pubkey, privkey)
+        return self[0]
 
     def _reduce(self, pubkey):
         """Reduce the Blockchain to the minimum size depending on target user
@@ -203,7 +210,23 @@ class Blockchain(list):
 
         """
         for b in self:
-            if b._contain_tx(tx):
+            if b.close_date is not None and b.close_date < tx.date:
+                return False
+            elif b._contain_tx(tx):
+                return True
+        return False
+
+    def _contain_close_tx(self, tx):
+        """Return True if a Transaction looks the same (except for the
+        signature) as given one.
+
+        :tx: Transaction we're looking for
+        :returns: bool
+        """
+        for b in self:
+            if b.close_date is not None and b.close_date < tx.date:
+                return False
+            elif b._contain_close_tx(tx):
                 return True
         return False
 
@@ -217,44 +240,46 @@ class UserBlockchain(Blockchain):
         super()._add_transaction(transaction)
         self.guzis_positions = None
 
-    def start(self, birthdate, my_privkey, ref_pubkey):
-        """Create a new blockchain. This blockchain won't be usable to pay or
-        create guzis while it has not been validated by a referent.
+    def make_birth_tx(self, birthdate=date.today()):
+        """Return unsigned birth block with given birthdate or today
 
         :birthdate: datetime.date The date of birth of new user
-        :my_privkey: bytes New user private key
-        :my_pubkey: bytes New user public key
-        :returns: None
+
+        :returns: Unsigned Transaction
 
         """
-        self.clear()
-        self.insert(0, BirthBlock(birthdate, self.pubkey, my_privkey))
-        init_block = Block(
-            previous_block_signature=self[0].signature, signer=ref_pubkey
-        )
-        self.insert(0, init_block)
+        return Transaction(VERSION, Transaction.BIRTH, self.pubkey, 0, birthdate)
 
-    def validate(self, ref_privkey, dt=None):
-        """Validate a newly created blockchain. This method should be called by
-        Referent to certify user blockchain
+    def fill_init_block(self, dt=None):
+        """Return the full init Block or raise error if something is missing
 
-        :returns: None
+        :returns: Block
         """
-        init_block = self[0]
-        init_block.balance = 0
-        init_block.total = 0
-        init_block.close_date = dt or date.today()
-        self.make_daily_guzis(dt)
-        self.make_daily_guzas(dt)
-        init_block.compute_merkle_root()
-        init_block.sign(init_block.signer, ref_privkey)
+        # TODO check len > 0
+        # TODO check tx 0, 1 & 2 types and signatures
+        last_block = self.last_block()
+        last_block.balance = 0
+        last_block.total = 0
+        last_block.close_date = dt or date.today()
+        last_block.previous_block_signature = EMPTY_HASH
+        last_block.compute_merkle_root()
+        return last_block
+
+    def close_last_block(self, dt=date.today()):
+        self[0].close_date = dt
+
+    def sign_last_block(self, signature):
+        # TODO : comment
+        # TODO : check block == self.last_block
+        # TODO : check block signature
+        self[0].sign(signature)
 
     def _get_guzis_amount(self):
         """Return total guzis user can create each day.
 
         :returns: int
         """
-        n = self[0].total
+        n = self[0].total if len(self) > 0 else 0
         if n < 0:
             raise InvalidBlockchainError("Total can never be negative")
         floatroot = n ** (1.0 / 3.0)
@@ -263,7 +288,7 @@ class UserBlockchain(Blockchain):
             return introot + 1
         return introot
 
-    def make_daily_guzis(self, dt=None):
+    def make_daily_guzis_tx(self, dt=None):
         """Return int number of guzis availables
 
         A Guzi Creation Transaction is done by a user to himself, creating his own
@@ -272,12 +297,12 @@ class UserBlockchain(Blockchain):
         A user must create (total)^(1/3)+1 Guzis/day (rounded down)
 
         :dt: datetime.date To override "Today" for creation date
-        :returns: Transaction
+        :returns: Unsigned Transaction
         """
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzis = [[[dt.isoformat()], list(range(amount))]]
-        tx = Transaction(
+        return Transaction(
             VERSION,
             Transaction.GUZI_CREATE,
             self.pubkey,
@@ -285,13 +310,8 @@ class UserBlockchain(Blockchain):
             tx_date=dt.isoformat(),
             guzis_positions=guzis,
         )
-        # TODO : Warning here cause tx would be different (i.e signature random)
-        if self._contain_tx(tx):
-            return
-        self._add_transaction(tx)
-        return self[0].transactions[0]
 
-    def make_daily_guzas(self, dt=None):
+    def make_daily_guzas_tx(self, dt=None):
         # TODO : check age > 18
         """Return int number of guzas availables
 
@@ -306,34 +326,29 @@ class UserBlockchain(Blockchain):
         amount = self._get_guzis_amount()
         dt = dt or date.today()
         guzas = [[[dt.isoformat()], list(range(amount))]]
-        self._add_transaction(
-            Transaction(
-                VERSION,
-                Transaction.GUZA_CREATE,
-                self.pubkey,
-                amount,
-                tx_date=dt.isoformat(),
-                guzis_positions=guzas,
-            )
+        return Transaction(
+            VERSION,
+            Transaction.GUZA_CREATE,
+            self.pubkey,
+            amount,
+            tx_date=dt.isoformat(),
+            guzis_positions=guzas,
         )
-        return self[0].transactions[0]
 
-    def pay_to_user(self, target, amount):
+    def make_pay_tx(self, target, amount):
         """Return Transaction to pay given target with given amount of Guzis
 
         Also add this Transaction to itself
         Return None and add no Transaction if amount == 0
 
-        :returns: Transaction or None
+        :returns: Unsigned Transaction or None
         """
         if amount < 0:
             raise NegativeAmountError
-        if amount == 0:
-            return
         if amount > self._get_available_guzis_amount():
             raise InsufficientFundsError
         guzis_positions = zip_positions(self._get_available_guzis()[:amount])
-        tx = Transaction(
+        return Transaction(
             VERSION,
             Transaction.PAYMENT,
             self.pubkey,
@@ -342,8 +357,6 @@ class UserBlockchain(Blockchain):
             target_user=target,
             guzis_positions=guzis_positions,
         )
-        self._add_transaction(tx)
-        return tx
 
     def pay_to_company(self, target, amount):
         pass
@@ -417,7 +430,7 @@ class CompanyBlockchain(Blockchain):
         pass
 
 
-class Block(Signable):
+class Block(Packable):
     def __init__(
         self,
         version=VERSION,
@@ -466,17 +479,6 @@ class Block(Signable):
             and isinstance(other, Block)
             and self.pack() == other.pack()
         )
-
-    def sign(self, pub, priv):
-        """
-        pub : bytes
-        priv : bytes
-
-        :returns: bytes
-        """
-        self.signer = pub
-        self.compute_merkle_root()
-        return super().sign(priv)
 
     def add_transaction(self, tx):
         """Add given transaction to the instance transactions pool
@@ -530,7 +532,8 @@ class Block(Signable):
         ]
         return res
 
-    def pack_for_hash(self):
+    def hash(self):
+        self.compute_merkle_root()
         return self.packer.pack_block_without_hash(self)
 
     def pack(self):
@@ -543,23 +546,19 @@ class Block(Signable):
     def _merkle_root(self):
         return self._tx_list_to_merkle_root([t.to_hash() for t in self.transactions])
 
-    def is_valid(self, owner):
-        if self._is_birthblock(owner):
-            return is_valid_signature(owner, self.pack_for_hash(), self.signature)
+    def is_valid(self):
+        for tx in self.transactions:
+            if not tx.is_valid():
+                return False
         if self.is_signed():
             return (
-                is_valid_signature(self.signer, self.pack_for_hash(), self.signature)
+                is_valid_signature(self.signer, self.hash(), self.signature)
                 and self._has_valid_merkleroot()
             )
         return True
 
-    def _is_birthblock(self, owner):
-        # TODO :use BirthBlock instance on Blockchain load instead 
-        return (
-            self.merkle_root == EMPTY_HASH
-            and self.previous_block_signature == EMPTY_HASH
-            and self.signer == owner
-        )
+    def _is_birthblock(self):
+        return self.previous_block_signature == EMPTY_HASH
 
     def _has_valid_merkleroot(self):
         return self._merkle_root() == self.merkle_root
@@ -592,32 +591,31 @@ class Block(Signable):
     def _contain_tx(self, tx):
         return tx in self.transactions
 
+    def _contain_close_tx(self, tx):
+        for t in self.transactions:
+            if t.almost_equal(tx):
+                return True
+        return False
+
     def _remove_tx(self, tx):
         self.transactions.remove(tx)
 
     def _containUser(self, pubkey):
         for t in self.transactions:
-            if pubkey in (t.target_user, t.target_company, t.source):
+            if pubkey in (t.target_user, t.target_company, t.signer):
                 return True
         return False
 
 
-class BirthBlock(Block):
-    def __init__(self, birthdate, new_user_pub_key, new_user_priv_key):
-        super().__init__(close_date=birthdate, signer=new_user_pub_key)
-        self.previous_block_signature = EMPTY_HASH
-        self.merkle_root = EMPTY_HASH
-        self.sign(new_user_pub_key, new_user_priv_key)
+class Transaction(Packable):
 
-
-class Transaction(Signable):
-
-    GUZI_CREATE = 0x00
-    GUZA_CREATE = 0x01
-    PAYMENT = 0x02
-    GUZI_ENGAGEMENT = 0x03
-    GUZA_ENGAGEMENT = 0x04
-    REFUSAL = 0x05
+    BIRTH = 0x00
+    GUZI_CREATE = 0x01
+    GUZA_CREATE = 0x02
+    PAYMENT = 0x03
+    GUZI_ENGAGEMENT = 0x04
+    GUZA_ENGAGEMENT = 0x05
+    REFUSAL = 0x06
     OWNER_SET = 0x10
     ADMIN_SET = 0x11
     WORKER_SET = 0x12
@@ -629,7 +627,7 @@ class Transaction(Signable):
         self,
         version,
         tx_type,
-        source,
+        signer,  # signer == source
         amount,
         tx_date=None,
         target_company=None,
@@ -640,8 +638,13 @@ class Transaction(Signable):
     ):
         self.version = version
         self.tx_type = tx_type
-        self.date = date.fromisoformat(tx_date) if tx_date else date.today()
-        self.source = source
+        if tx_date is None:
+            self.date = date.today()
+        elif isinstance(tx_date, date):
+            self.date = tx_date
+        else:
+            self.date = date.fromisoformat(tx_date)
+        self.signer = signer
         self.amount = int(amount)
         self.target_company = target_company
         self.target_user = target_user
@@ -655,7 +658,7 @@ class Transaction(Signable):
         return "{}, {}, {}, {}, {}".format(
             self.tx_type,
             self.date,
-            self.source.hex()[:10],
+            self.signer.hex()[:10],
             self.amount,
             self.guzis_positions,
         )
@@ -664,26 +667,28 @@ class Transaction(Signable):
         return self.__str__()
 
     def __eq__(self, other):
+        return self.almost_equal(other) and self.signature == other.signature
+
+    def almost_equal(self, other):
         return (
             other is not None
             and isinstance(other, Transaction)
             and self.version == other.version
             and self.tx_type == other.tx_type
             and self.date == other.date
-            and self.source == other.source
+            and self.signer == other.signer
             and self.amount == other.amount
             and self.target_company == other.target_company
             and self.target_user == other.target_user
             and self.guzis_positions == other.guzis_positions
             and self.detail == other.detail
-            and self.signature == other.signature
         )
 
     def as_list(self):
         return [
             self.version,
             self.tx_type,
-            self.source,
+            self.signer,
             self.amount,
             self.date.isoformat(),
             self.target_company,
@@ -697,8 +702,19 @@ class Transaction(Signable):
         res.append(self.signature)
         return res
 
-    def pack_for_hash(self):
+    def hash(self):
         return self.packer.pack_tx_without_hash(self)
 
     def pack(self):
         return self.packer.pack_tx(self)
+
+    def to_hash(self):
+        return guzi_hash(self.hash())
+
+    def is_signed(self):
+        return self.signature is not None
+
+    def is_valid(self):
+        if self.is_signed():
+            return is_valid_signature(self.signer, self.hash(), self.signature)
+        return True

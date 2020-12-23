@@ -1,5 +1,6 @@
 from datetime import date
 
+import ecdsa
 from freezegun import freeze_time
 
 from guzilib.blockchain import VERSION, Transaction, UserBlockchain
@@ -122,8 +123,20 @@ def random_transaction():
     )
 
 
+def random_sign(packable, signer=REF_PUB_KEY, pk=REF_PRIV_KEY):
+    packable.signer = signer
+    signature = sign(packable.hash(), pk)
+    packable.sign(signature)
+    return packable
+
+
 def make_blockchain(
-    start=date(2000, 1, 1), days=0, tx_per_block=1, total=0, end_with_empty_block=False
+    start=date(2000, 1, 1),
+    days=0,
+    tx_per_block=1,
+    total=0,
+    end_with_empty_block=False,
+    close_last_block=True,
 ):
     """Make a Blockchain with given informations
 
@@ -140,18 +153,42 @@ def make_blockchain(
     """
     with freeze_time(start) as frozen_date:
         bc = UserBlockchain(NEW_USER_PUB_KEY)
-        bc.start(start.isoformat(), NEW_USER_PRIV_KEY, REF_PUB_KEY)
-        bc[0].total = total
-        bc.validate(REF_PRIV_KEY)
-        for _ in range(days):
+        birth_tx = bc.make_birth_tx(frozen_date.time_to_freeze.date())
+        tx_guzis = bc.make_daily_guzis_tx(frozen_date.time_to_freeze.date())
+        tx_guzas = bc.make_daily_guzas_tx(frozen_date.time_to_freeze.date())
+        random_sign(birth_tx, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+        random_sign(tx_guzis, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+        random_sign(tx_guzas, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+        bc._add_transaction(birth_tx)
+        bc._add_transaction(tx_guzis)
+        bc._add_transaction(tx_guzas)
+        init_block = bc.fill_init_block()
+        random_sign(init_block, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+        for i in range(days):
+            frozen_date.tick(60 * 60 * 24)
             bc.new_block()
             if tx_per_block > 0:
-                bc.make_daily_guzis()
-            if tx_per_block > 1:
-                for _ in range(1, tx_per_block):
-                    bc.pay_to_user(REF_PUB_KEY, bc._get_available_guzis_amount())
-            bc.sign_last_block(REF_PUB_KEY, REF_PRIV_KEY)
-            frozen_date.tick(60 * 60 * 24)
+                tx = bc.make_daily_guzis_tx(frozen_date.time_to_freeze.date())
+                random_sign(tx, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+                bc._add_transaction(tx)
+            for _ in range(1, tx_per_block):
+                tx = bc.make_pay_tx(REF_PUB_KEY, bc._get_available_guzis_amount())
+                random_sign(tx, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+                bc._add_transaction(tx)
+            if i < days - 1 or (i == days - 1 and close_last_block is True):
+                bc.close_last_block()
+                random_sign(bc.last_block())
     if end_with_empty_block:
         bc.new_block()
     return bc
+
+
+def sign(data, privkey):
+    """Sign the given data and return the signature
+
+    :data: bytes
+    :returns: bytes
+
+    """
+    sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
+    return sk.sign(data)

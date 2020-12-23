@@ -7,24 +7,17 @@ EMPTY_HASH = 0
 
 
 class Packable:
-    def pack_for_hash(self):
+    def hash(self):
         return NotImplemented
 
-
-class Signable(Packable):
-    def to_hash(self):
-        return guzi_hash(self.pack_for_hash())
-
-    def sign(self, privkey):
-        """Set the instance signature with given private key.
-
-        privkey : bytes
+    def sign(self, signature):
+        """
+        signature : bytes
 
         :returns: bytes
         """
-        sk = ecdsa.SigningKey.from_string(privkey, curve=ecdsa.SECP256k1)
-        self.signature = sk.sign(self.pack_for_hash())
-        return self.signature
+        # TODO : Raise error if signature is invalid
+        self.signature = signature
 
 
 def is_valid_signature(pubkey, data, signature):

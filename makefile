@@ -7,6 +7,6 @@ test:
 	pipenv run pytest
 
 format:
-	pipenv run black guzilib tests
-	pipenv run isort guzilib tests
+	pipenv run black guzilib test
+	pipenv run isort guzilib test
 	pipenv run flake8

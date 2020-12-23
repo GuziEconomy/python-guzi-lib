@@ -1,4 +1,6 @@
 from datetime import timedelta
+from test.test_blockchain import KEY_POOL
+from test.test_utils import random_sign
 
 from hypothesis import note
 from hypothesis import strategies as st
@@ -11,8 +13,7 @@ from hypothesis.stateful import (
 )
 
 from guzilib.blockchain import UserBlockchain
-from guzilib.errors import InsufficientFundsError, NegativeAmountError
-from test.test_blockchain import KEY_POOL
+from guzilib.errors import GuziError, InsufficientFundsError, NegativeAmountError
 
 
 class UserBlockchainStateMachine(RuleBasedStateMachine):
@@ -35,13 +36,28 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
         attributes
         """
         self.bc = UserBlockchain(my_key_pair["pub"])
-        self.bc.start(birthdate.isoformat(), my_key_pair["priv"], ref_key_pair["pub"])
-        self.bc.validate(ref_key_pair["priv"], birthdate)
+
+        birth_tx = self.bc.make_birth_tx(birthdate)
+        random_sign(birth_tx, my_key_pair["pub"], my_key_pair["priv"])
+        self.bc._add_transaction(birth_tx)
+
+        tx_guzis = self.bc.make_daily_guzis_tx(birthdate)
+        random_sign(tx_guzis, my_key_pair["pub"], my_key_pair["priv"])
+        self.bc._add_transaction(tx_guzis)
+
+        tx_guzas = self.bc.make_daily_guzas_tx(birthdate)
+        random_sign(tx_guzas, my_key_pair["pub"], my_key_pair["priv"])
+        self.bc._add_transaction(tx_guzas)
+
+        init_block = self.bc.fill_init_block(birthdate)
+        random_sign(init_block, ref_key_pair["pub"], ref_key_pair["priv"])
+
         self.bc.new_block()
 
         self.guzis = 1
         self.current_date = birthdate
         self.guzis_made_today = True
+        self.key_pair = my_key_pair
 
     @rule()
     def new_day(self):
@@ -55,16 +71,24 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
         Note that if it was already made today, it shouldn't create those
         again.
         """
-        if not self.guzis_made_today:
-            self.guzis += self.bc._get_guzis_amount()
-            self.guzis_made_today = True
-        self.bc.make_daily_guzis(self.current_date)
+        try:
+            tx = self.bc.make_daily_guzis_tx(self.current_date)
+            random_sign(tx, self.key_pair["pub"], self.key_pair["priv"])
+            self.bc._add_transaction(tx)
+            if not self.guzis_made_today:
+                self.guzis += self.bc._get_guzis_amount()
+                self.guzis_made_today = True
+        except GuziError:
+            pass
 
     @rule(target_user=st.sampled_from(KEY_POOL), amount=st.integers())
     def pay_to(self, target_user, amount):
         """Simulates a payment to another user."""
         try:
-            self.bc.pay_to_user(target_user["pub"], amount)
+            note("paying amount {}".format(amount))
+            tx = self.bc.make_pay_tx(target_user, amount)
+            random_sign(tx, self.key_pair["pub"], self.key_pair["priv"])
+            self.bc._add_transaction(tx)
             self.guzis -= amount
         except (InsufficientFundsError, NegativeAmountError):
             pass
