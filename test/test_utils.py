@@ -148,7 +148,7 @@ def make_blockchain(
     if set to True.
     :returns: Blockchain
 
-    Note: There is always one day per block
+    Note: This method makes always one day per block
 
     """
     with freeze_time(start) as frozen_date:
@@ -163,9 +163,9 @@ def make_blockchain(
         bc._add_transaction(tx_guzis)
         bc._add_transaction(tx_guzas)
         init_block = bc.fill_init_block()
-        random_sign(init_block, NEW_USER_PUB_KEY, NEW_USER_PRIV_KEY)
+        random_sign(init_block)
         for i in range(days):
-            frozen_date.tick(60 * 60 * 24)
+            frozen_date.tick(60 * 60 * 24) # +1 day
             bc.new_block()
             if tx_per_block > 0:
                 tx = bc.make_daily_guzis_tx(frozen_date.time_to_freeze.date())

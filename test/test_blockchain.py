@@ -56,9 +56,8 @@ class TestUserBlockchainMakeBirthTx:
 
 
 class TestUserBlockchainFillInitBlock:
-    @freeze_time("2011-12-13")
     def test_fill_init_block(self):
-        vk = ecdsa.VerifyingKey.from_string(NEW_USER_PUB_KEY, curve=ecdsa.SECP256k1)
+        vk = ecdsa.VerifyingKey.from_string(REF_PUB_KEY, curve=ecdsa.SECP256k1)
 
         bc = make_blockchain()
 
