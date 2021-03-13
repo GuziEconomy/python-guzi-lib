@@ -335,7 +335,7 @@ class UserBlockchain(Blockchain):
             guzis_positions=guzas,
         )
 
-    def make_pay_tx(self, target, amount):
+    def make_pay_tx(self, target, amount, target_is_a_company=False):
         """Return Transaction to pay given target with given amount of Guzis
 
         Also add this Transaction to itself
@@ -354,12 +354,34 @@ class UserBlockchain(Blockchain):
             self.pubkey,
             amount,
             tx_date=date.today().isoformat(),
-            target_user=target,
+            target_user=target if not target_is_a_company else None,
+            target_company=target if target_is_a_company else None,
             guzis_positions=guzis_positions,
         )
 
+    def pay_to_user(self, target, amount):
+        """Create and add a transaction to blockchain
+
+        :target: User Id
+        :amount: Amount to pay
+        :returns: Transaction The Transaction created
+
+        """
+        tx = self.make_pay_tx(target, amount)
+        self._add_transaction(tx)
+        return tx
+
     def pay_to_company(self, target, amount):
-        pass
+        """Create and add a transaction to blockchain
+
+        :target: Company Id
+        :amount: Amount to pay
+        :returns: Transaction The Transaction created
+
+        """
+        tx = self.make_pay_tx(target, amount, target_is_a_company=True)
+        self._add_transaction(tx)
+        return tx
 
     def engage_guzis_to_user(self, target, days, daily_amount):
         pass

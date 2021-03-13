@@ -75,7 +75,7 @@ class TestUserBlockchainPayToUser:
     def init(self, amount=2):
         self.bc = make_blockchain(days=1, close_last_block=False)
 
-        return self.bc.make_pay_tx(REF_PUB_KEY, amount)
+        return self.bc.pay_to_user(REF_PUB_KEY, amount)
 
     def test_transaction_is_correctly_created(self):
         result = self.init()
@@ -93,13 +93,11 @@ class TestUserBlockchainPayToUser:
 
     def test_transaction_is_added_to_blockchain(self):
         tx = self.init()
-        self.bc._add_transaction(tx)
 
         assert len(self.bc.last_block().transactions) == 2
 
     def test_guzis_have_been_spended(self):
         tx = self.init()
-        self.bc._add_transaction(tx)
 
         assert self.bc._get_available_guzis() == []
 
@@ -110,6 +108,52 @@ class TestUserBlockchainPayToUser:
     def test_raise_error_for_to_big_amount(self):
         with pytest.raises(InsufficientFundsError):
             self.init(3)
+
+class TestCompanyBlockchainPayToCompany:
+    def init(self, amount=2):
+        self.bc = make_blockchain(days=1, close_last_block=False)
+
+        return self.bc.pay_to_company(REF_PUB_KEY, amount)
+
+    def test_transaction_is_correctly_created(self):
+        result = self.init()
+        expected_tx = Transaction(
+            VERSION,
+            Transaction.PAYMENT,
+            signer=NEW_USER_PUB_KEY,
+            amount=2,
+            tx_date=date.today().isoformat(),
+            target_company=REF_PUB_KEY,
+            guzis_positions=[(["2000-01-01", "2000-01-02"], [0])],
+        )
+
+        assert result == expected_tx
+
+    def test_transaction_is_added_to_blockchain(self):
+        tx = self.init()
+
+        assert len(self.bc.last_block().transactions) == 2
+
+    def test_guzis_have_been_spended(self):
+        tx = self.init()
+
+        assert self.bc._get_available_guzis() == []
+
+    def test_raise_error_for_negative_amount(self):
+        with pytest.raises(NegativeAmountError):
+            self.init(-2)
+
+    def test_raise_error_for_to_big_amount(self):
+        with pytest.raises(InsufficientFundsError):
+            self.init(3)
+
+
+class TestBlockchainEngageGuzisToUser:
+
+    """Test Blockchain.engage_guzis_to_user method"""
+
+    def test_raise_error_for_too_big_daily_amount(self):
+        pass
 
 
 class TestBlockchainEq:
@@ -129,7 +173,7 @@ class TestBlockchainEq:
 class TestBlockchainSaveToFile:
     def test_all_blocks_be_in(self):
         bc = make_blockchain(days=2, tx_per_block=1)
-        block0 = bc[0].pack().hex()
+        block0 = bc.last_block().pack().hex()
         block1 = bc[1].pack().hex()
         outfile = BytesIO()
 
@@ -254,7 +298,7 @@ class TestBlockchainSignLastBlock:
 
         random_sign(bc.last_block())
 
-        assert bc[0].signer == REF_PUB_KEY
+        assert bc.last_block().signer == REF_PUB_KEY
 
 
 class TestBlockchainLoadFromFile:
@@ -475,7 +519,7 @@ class TestBlockchainMakeDailyGuzas:
 class TestBlockchainGetGuzisAmount:
     def test_return_0_for_total_0(self):
         bc = make_blockchain(end_with_empty_block=True)
-        bc[0].total = 0
+        bc.last_block().total = 0
 
         result = bc._get_guzis_amount()
 
@@ -516,7 +560,7 @@ class TestBlockchainRefuseTransaction:
     def test_return_a_refusal_transaction(self):
         bc = make_blockchain(days=1, close_last_block=False)
 
-        refused = bc[0].transactions[0]
+        refused = bc.last_block().transactions[0]
         refusal = bc.refuse_transaction(refused)
 
         assert refusal.tx_type == Transaction.REFUSAL
@@ -530,16 +574,16 @@ class TestBlockchainRefuseTransaction:
 
     def test_remove_tx_from_last_block(self):
         bc = make_blockchain(days=1, tx_per_block=1, close_last_block=False)
-        assert len(bc[0].transactions) == 1
+        assert len(bc.last_block().transactions) == 1
 
-        bc.refuse_transaction(bc[0].transactions[0])
-        assert len(bc[0].transactions) == 0
+        bc.refuse_transaction(bc.last_block().transactions[0])
+        assert len(bc.last_block().transactions) == 0
 
     def test_raise_error_if_transaction_is_sealed(self):
         bc = make_blockchain(days=1)
 
         with pytest.raises(NotRemovableTransactionError):
-            bc.refuse_transaction(bc[0].transactions[0])
+            bc.refuse_transaction(bc.last_block().transactions[0])
 
     def test_raise_error_if_transaction_is_sealed_in_old_block(self):
         bc = make_blockchain(days=2)
@@ -625,7 +669,7 @@ class TestBLockchainIsValid:
 
     def test_change_transactions_after_signed_ko(self):
         bc = make_blockchain(days=4, tx_per_block=4)
-        bc[0].transactions[0].amount = 12
+        bc.last_block().transactions[0].amount = 12
 
         result = bc.is_valid()
 
@@ -813,7 +857,7 @@ class TestBlock:
     def test_compute_merkle_root_3_tx(self):
         """
         If there are 3 transactions, merkle root should be :
-        hash(hash(hash0 + hash1) + hash(hash3 + hash3))
+        hash(hash(hash2 + hash1) + hash(hash0 + hash0))
         """
         # Arrange
         tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
