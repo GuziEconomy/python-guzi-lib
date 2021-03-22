@@ -180,6 +180,8 @@ def make_blockchain(
                 random_sign(bc.last_block())
     if end_with_empty_block:
         bc.new_block()
+    if total > 0:
+        bc[0].total = total
     return bc
 
 

@@ -1,5 +1,5 @@
 import itertools
-from datetime import date
+import datetime
 
 import umsgpack
 
@@ -23,6 +23,7 @@ from guzilib.errors import (
 from guzilib.packer import BytePacker
 
 VERSION = 1
+NOT_SPENDABLE_INDEX = 32
 MAX_TX_IN_BLOCK = 30
 
 
@@ -152,7 +153,7 @@ class Blockchain(list):
             Transaction.REFUSAL,
             signer=tx.target_user,
             amount=tx.amount,
-            tx_date=date.today().isoformat(),
+            tx_date=datetime.date.today().isoformat(),
             target_user=tx.signer,
             detail=tx.signature,
         )
@@ -240,7 +241,7 @@ class UserBlockchain(Blockchain):
         super()._add_transaction(transaction)
         self.guzis_positions = None
 
-    def make_birth_tx(self, birthdate=date.today()):
+    def make_birth_tx(self, birthdate=datetime.date.today()):
         """Return unsigned birth block with given birthdate or today
 
         :birthdate: datetime.date The date of birth of new user
@@ -260,12 +261,12 @@ class UserBlockchain(Blockchain):
         last_block = self.last_block()
         last_block.balance = 0
         last_block.total = 0
-        last_block.close_date = dt or date.today()
+        last_block.close_date = dt or datetime.date.today()
         last_block.previous_block_signature = EMPTY_HASH
         last_block.compute_merkle_root()
         return last_block
 
-    def close_last_block(self, dt=date.today()):
+    def close_last_block(self, dt=datetime.date.today()):
         self[0].close_date = dt
 
     def sign_last_block(self, signature):
@@ -300,7 +301,7 @@ class UserBlockchain(Blockchain):
         :returns: Unsigned Transaction
         """
         amount = self._get_guzis_amount()
-        dt = dt or date.today()
+        dt = dt or datetime.date.today()
         guzis = [[[dt.isoformat()], list(range(amount))]]
         return Transaction(
             VERSION,
@@ -324,7 +325,7 @@ class UserBlockchain(Blockchain):
         :returns: Transaction
         """
         amount = self._get_guzis_amount()
-        dt = dt or date.today()
+        dt = dt or datetime.date.today()
         guzas = [[[dt.isoformat()], list(range(amount))]]
         return Transaction(
             VERSION,
@@ -353,7 +354,7 @@ class UserBlockchain(Blockchain):
             Transaction.PAYMENT,
             self.pubkey,
             amount,
-            tx_date=date.today().isoformat(),
+            tx_date=datetime.date.today().isoformat(),
             target_user=target if not target_is_a_company else None,
             target_company=target if target_is_a_company else None,
             guzis_positions=guzis_positions,
@@ -383,8 +384,24 @@ class UserBlockchain(Blockchain):
         self._add_transaction(tx)
         return tx
 
-    def engage_guzis_to_user(self, target, days, daily_amount):
-        pass
+    def engage_guzis_to_user(self, target, numdays, daily_amount):
+        """
+        Note : One cannot engage guzis indexed < 32 as it would prevent him or
+        her from spending during daily life.
+        """
+        max_index = self._get_guzis_amount()
+        if daily_amount > max_index - NOT_SPENDABLE_INDEX:
+            raise InsufficientFundsError
+        days = [datetime.date.today() - datetime.timedelta(days=x) for x in range(numdays)]
+        return Transaction(
+                VERSION,
+                Transaction.GUZI_ENGAGEMENT,
+                self.pubkey,
+                numdays*daily_amount,
+                tx_date=datetime.date.today().isoformat(),
+                target_user=target,
+                guzis_positions=[[[d.isoformat() for d in days], list(range(max_index - daily_amount, max_index))]]
+                )
 
     def engage_guzis_to_company(self, target, days, daily_amount):
         pass
@@ -467,7 +484,7 @@ class Block(Packable):
         signature=None,
     ):
         self.version = version
-        self.close_date = date.fromisoformat(close_date) if close_date else None
+        self.close_date = datetime.date.fromisoformat(close_date) if close_date else None
         self.previous_block_signature = previous_block_signature
         self.merkle_root = merkle_root
         self.signer = signer
@@ -661,11 +678,11 @@ class Transaction(Packable):
         self.version = version
         self.tx_type = tx_type
         if tx_date is None:
-            self.date = date.today()
-        elif isinstance(tx_date, date):
+            self.date = datetime.date.today()
+        elif isinstance(tx_date, datetime.date):
             self.date = tx_date
         else:
-            self.date = date.fromisoformat(tx_date)
+            self.date = datetime.date.fromisoformat(tx_date)
         self.signer = signer
         self.amount = int(amount)
         self.target_company = target_company

@@ -152,8 +152,36 @@ class TestBlockchainEngageGuzisToUser:
 
     """Test Blockchain.engage_guzis_to_user method"""
 
+    @freeze_time("2000-01-01")
+    def test_ok(self):
+        bc = make_blockchain(total=32**3)
+        tx = bc.engage_guzis_to_user(target=REF_PUB_KEY, numdays=1, daily_amount=1)
+
+        assert tx.tx_type == Transaction.GUZI_ENGAGEMENT
+        assert tx.guzis_positions == [[[date(2000, 1, 1).isoformat()], [32]]]
+
     def test_raise_error_for_too_big_daily_amount(self):
-        pass
+        bc = make_blockchain(total=31**3)
+        with pytest.raises(InsufficientFundsError):
+            bc.engage_guzis_to_user(target=REF_PUB_KEY, numdays=1, daily_amount=1)
+
+
+class TestBlockchainEngageGuzisToCompany:
+
+    """Test Blockchain.engage_guzis_to_company method"""
+
+    @freeze_time("2000-01-01")
+    def test_ok(self):
+        bc = make_blockchain(total=32**3)
+        tx = bc.engage_guzis_to_user(target=REF_PUB_KEY, numdays=1, daily_amount=1)
+
+        assert tx.tx_type == Transaction.GUZI_ENGAGEMENT
+        assert tx.guzis_positions == [[[date(2000, 1, 1).isoformat()], [32]]]
+
+    def test_raise_error_for_too_big_daily_amount(self):
+        bc = make_blockchain(total=31**3)
+        with pytest.raises(InsufficientFundsError):
+            bc.engage_guzis_to_user(target=REF_PUB_KEY, numdays=1, daily_amount=1)
 
 
 class TestBlockchainEq:
