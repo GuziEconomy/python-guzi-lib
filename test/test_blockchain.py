@@ -66,7 +66,7 @@ class TestUserBlockchainFillInitBlock:
 
         assert init_block.version == VERSION
         assert init_block.close_date == date(2000, 1, 1)
-        assert len(init_block.transactions) == 3  # 1.birth, 2.guzis 3.guzas
+        assert len(init_block.transactions) == 3  # 1.birth, 2.guzis 3.guziboxes
         assert bc.is_valid() is True
         assert vk.verify(init_block.signature, expected_data) is True
 
@@ -513,25 +513,25 @@ class TestBlockchainMakeDailyGuzis:
         assert tx.guzis_positions == [[[dt.isoformat()], [0]]]
 
 
-class TestBlockchainMakeDailyGuzas:
-    def test_create_GUZA_CREATE_transaction(self):
+class TestBlockchainMakeDailyGuziboxes:
+    def test_create_GUZIBOX_CREATE_transaction(self):
         bc = UserBlockchain(NEW_USER_PUB_KEY)
-        tx = bc.make_daily_guzas_tx()
+        tx = bc.make_daily_guziboxes_tx()
 
-        assert tx.tx_type == Transaction.GUZA_CREATE
+        assert tx.tx_type == Transaction.GUZIBOX_CREATE
 
-    def test_create_1_guza_if_total_is_0(self):
+    def test_create_1_guzibox_if_total_is_0(self):
         bc = make_blockchain(end_with_empty_block=True)
         bc.last_block().total = 0
-        tx = bc.make_daily_guzas_tx(date(2000, 1, 2))
+        tx = bc.make_daily_guziboxes_tx(date(2000, 1, 2))
 
         assert tx.guzis_positions == [[[date(2000, 1, 2).isoformat()], [0]]]
 
-    def test_create_6_guza_if_total_is_125(self):
+    def test_create_6_guzibox_if_total_is_125(self):
         bc = make_blockchain(end_with_empty_block=True)
         bc.last_block().total = 125
 
-        tx = bc.make_daily_guzas_tx()
+        tx = bc.make_daily_guziboxes_tx()
 
         assert tx.guzis_positions == [[[date.today().isoformat()], list(range(6))]]
 
@@ -539,7 +539,7 @@ class TestBlockchainMakeDailyGuzas:
         bc = make_blockchain(end_with_empty_block=True)
         dt = date(2001, 3, 22)
 
-        tx = bc.make_daily_guzas_tx(dt)
+        tx = bc.make_daily_guziboxes_tx(dt)
 
         assert tx.guzis_positions == [[[dt.isoformat()], [0]]]
 
@@ -725,7 +725,7 @@ class TestBlockContains:
 
         # Arrange
         tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
-        tx1 = Transaction(VERSION, Transaction.GUZA_CREATE, NEW_USER_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZIBOX_CREATE, NEW_USER_PUB_KEY, 0)
         tx2 = Transaction(VERSION, Transaction.PAYMENT, NEW_USER_PUB_KEY, 0)
         b = Block()
 
@@ -887,8 +887,8 @@ class TestBlock:
         """
         # Arrange
         tx0 = Transaction(VERSION, Transaction.GUZI_CREATE, NEW_USER_PUB_KEY, 0)
-        tx1 = Transaction(VERSION, Transaction.GUZA_CREATE, NEW_USER_PUB_KEY, 0)
-        tx2 = Transaction(VERSION, Transaction.GUZA_CREATE, REF_PUB_KEY, 0)
+        tx1 = Transaction(VERSION, Transaction.GUZIBOX_CREATE, NEW_USER_PUB_KEY, 0)
+        tx2 = Transaction(VERSION, Transaction.GUZIBOX_CREATE, REF_PUB_KEY, 0)
         block = Block()
         block.add_transactions([tx0, tx1, tx2])
 

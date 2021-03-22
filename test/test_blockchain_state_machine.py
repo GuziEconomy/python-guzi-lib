@@ -45,9 +45,9 @@ class UserBlockchainStateMachine(RuleBasedStateMachine):
         random_sign(tx_guzis, my_key_pair["pub"], my_key_pair["priv"])
         self.bc._add_transaction(tx_guzis)
 
-        tx_guzas = self.bc.make_daily_guzas_tx(birthdate)
-        random_sign(tx_guzas, my_key_pair["pub"], my_key_pair["priv"])
-        self.bc._add_transaction(tx_guzas)
+        tx_guziboxes = self.bc.make_daily_guziboxes_tx(birthdate)
+        random_sign(tx_guziboxes, my_key_pair["pub"], my_key_pair["priv"])
+        self.bc._add_transaction(tx_guziboxes)
 
         init_block = self.bc.fill_init_block(birthdate)
         random_sign(init_block, ref_key_pair["pub"], ref_key_pair["priv"])

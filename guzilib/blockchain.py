@@ -309,28 +309,28 @@ class UserBlockchain(Blockchain):
             guzis_positions=guzis,
         )
 
-    def make_daily_guzas_tx(self, dt=None):
+    def make_daily_guziboxes_tx(self, dt=None):
         # TODO : check age > 18
-        """Return int number of guzas availables
+        """Return int number of guziboxes availables
 
-        A Guza Creation Transaction is done by a user to himself, creating his own
-        Guzas. This transaction only contains date, user id and the amount of
-        created guzas.
-        A user must create (total)^(1/3)+1 Guzas/day (rounded down)
+        A Guzibox Creation Transaction is done by a user to himself, creating his own
+        Guziboxes. This transaction only contains date, user id and the amount of
+        created guziboxes.
+        A user must create (total)^(1/3)+1 Guziboxes/day (rounded down)
 
         :dt: datetime.date To override "Today" for creation date
         :returns: Transaction
         """
         amount = self._get_guzis_amount()
         dt = dt or datetime.date.today()
-        guzas = [[[dt.isoformat()], list(range(amount))]]
+        guziboxes = [[[dt.isoformat()], list(range(amount))]]
         return Transaction(
             VERSION,
-            Transaction.GUZA_CREATE,
+            Transaction.GUZIBOX_CREATE,
             self.pubkey,
             amount,
             tx_date=dt.isoformat(),
-            guzis_positions=guzas,
+            guzis_positions=guziboxes,
         )
 
     def make_pay_tx(self, target, amount, target_is_a_company=False):
@@ -403,7 +403,7 @@ class UserBlockchain(Blockchain):
     def engage_guzis_to_company(self, target, days, daily_amount):
         pass
 
-    def engage_guzas(self, target, days, daily_amount):
+    def engage_guziboxes(self, target, days, daily_amount):
         pass
 
     def _get_available_guzis(self):
@@ -643,10 +643,10 @@ class Transaction(Packable):
 
     BIRTH = 0x00
     GUZI_CREATE = 0x01
-    GUZA_CREATE = 0x02
+    GUZIBOX_CREATE = 0x02
     PAYMENT = 0x03
     GUZI_ENGAGEMENT = 0x04
-    GUZA_ENGAGEMENT = 0x05
+    GUZIBOX_ENGAGEMENT = 0x05
     REFUSAL = 0x06
     OWNER_SET = 0x10
     ADMIN_SET = 0x11
