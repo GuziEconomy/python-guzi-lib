@@ -92,10 +92,8 @@ class Blockchain(list):
         if len(self) > 0:
             previous_block = self[0]
             block.previous_block_signature = previous_block.signature
-            block.balance = previous_block.balance
             block.total = previous_block.total
         else:
-            block.balance = 0
             block.total = 0
 
         super().insert(0, block)
@@ -259,7 +257,6 @@ class UserBlockchain(Blockchain):
         # TODO check len > 0
         # TODO check tx 0, 1 & 2 types and signatures
         last_block = self.last_block()
-        last_block.balance = 0
         last_block.total = 0
         last_block.close_date = dt or datetime.date.today()
         last_block.previous_block_signature = EMPTY_HASH
@@ -477,7 +474,6 @@ class Block(Packable):
         previous_block_signature=None,
         merkle_root=None,
         signer=None,
-        balance=None,
         total=None,
         b_transactions=None,
         b_engagements=None,
@@ -488,7 +484,6 @@ class Block(Packable):
         self.previous_block_signature = previous_block_signature
         self.merkle_root = merkle_root
         self.signer = signer
-        self.balance = balance
         self.total = total
         self.transactions = (
             [Transaction(*umsgpack.unpackb(b_tx)) for b_tx in b_transactions]
@@ -505,7 +500,6 @@ class Block(Packable):
             self.version,
             self.close_date,
             self.signer.hex()[:10] if self.signer else "unsigned",
-            self.balance,
             self.total,
         )
 
@@ -556,7 +550,6 @@ class Block(Packable):
             self.previous_block_signature,
             self.merkle_root,
             self.signer,
-            self.balance,
             self.total,
             len(self.transactions),
             len(self.engagements),

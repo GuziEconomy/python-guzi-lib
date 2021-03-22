@@ -779,7 +779,6 @@ class TestBlockPack:
         #     previous_block_signature=EMPTY_HASH,
         #     merkle_root=EMPTY_HASH,
         #     signer=NEW_USER_PUB_KEY,
-        #     balance=0,
         #     total=0,
         # )
 
@@ -817,7 +816,6 @@ class TestBlock:
         #     previous_block_signature=EMPTY_HASH,
         #     merkle_root=EMPTY_HASH,
         #     signer=NEW_USER_PUB_KEY,
-        #     balance=0,
         #     total=0,
         # )
 
